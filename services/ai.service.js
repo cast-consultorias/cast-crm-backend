@@ -1,8 +1,10 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 async function generateLeadReport(lead) {
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
   const prompt = `Eres el analista estratégico de CAST Consultorías. Analiza este lead y genera un reporte ejecutivo en español.
 
 DATOS DEL LEAD:
@@ -36,13 +38,8 @@ Señales de alerta: objeciones probables, riesgos de cierre, factores que pueden
 ## 6. Ruta Preliminar Sugerida
 Recomendación concreta para la Blueprint Session: qué explorar, qué preguntar, qué proponer.`;
 
-  const message = await client.messages.create({
-    model: 'claude-opus-4-7',
-    max_tokens: 1500,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  return message.content[0].text;
+  const result = await model.generateContent(prompt);
+  return result.response.text();
 }
 
 module.exports = { generateLeadReport };
