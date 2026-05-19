@@ -4,3 +4,4 @@ logs/*.log
 dist/
 *.key
 *.pem
+service-account.json
