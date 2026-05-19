@@ -102,7 +102,7 @@ async function sendBookingInvitation(lead) {
 <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
   <tr>
     <td align="center">
-      <a href="${CALCOM_BOOK_URL}" style="display:inline-block;background:#007AFF;color:#fff;text-decoration:none;font-size:16px;font-weight:700;padding:16px 36px;border-radius:12px;letter-spacing:0.3px;">📅 Agendar mi sesión</a>
+      <a href="${CALCOM_BOOK_URL}?metadata[leadId]=${lead.id}" style="display:inline-block;background:#007AFF;color:#fff;text-decoration:none;font-size:16px;font-weight:700;padding:16px 36px;border-radius:12px;letter-spacing:0.3px;">📅 Agendar mi sesión</a>
     </td>
   </tr>
 </table>
