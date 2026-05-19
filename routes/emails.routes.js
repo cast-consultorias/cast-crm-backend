@@ -10,6 +10,17 @@ async function getLead(id, res) {
   return lead;
 }
 
+// POST /api/emails/booking-invitation
+router.post('/booking-invitation', auth, async (req, res, next) => {
+  try {
+    const { leadId } = req.body;
+    const lead = await getLead(leadId, res); if (!lead) return;
+    const msgId = await gmail.sendBookingInvitation(lead);
+    await svc.addActivityLog(leadId, req.user.userId, req.user.name, req.user.role, 'Email enviado', 'Email 00: Invitación a agendar Blueprint (reenvío)', lead.stage);
+    res.json({ success: true, messageId: msgId });
+  } catch (e) { next(e); }
+});
+
 // POST /api/emails/session-confirmed
 router.post('/session-confirmed', auth, async (req, res, next) => {
   try {
