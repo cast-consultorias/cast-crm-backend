@@ -51,7 +51,7 @@ router.post('/n8n/report-ready', async (req, res, next) => {
     const { leadId, reportContent } = req.body;
 
     // 1. Marcar Reporte IA como listo y avanzar a Stage 03
-    await svc.updateLead(leadId, { reportIA: true, updatedAt: nowISO() }, 'n8n', 'n8n Webhook', 'Sistema');
+    await svc.updateLead(leadId, { reportIA: true, reportContent: reportContent||'', updatedAt: nowISO() }, 'n8n', 'n8n Webhook', 'Sistema');
     await svc.updateLeadStage(leadId, '03', 'n8n', 'n8n Webhook', 'Sistema', 'Reporte IA generado automáticamente');
 
     // 2. Routing automático para leads de campañas masivas

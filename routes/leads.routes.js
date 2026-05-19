@@ -169,4 +169,29 @@ router.post('/sync-external', auth, ceoOnly, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /api/leads/:id/generate-report
+router.post('/:id/generate-report', auth, async (req, res, next) => {
+  try {
+    const lead = await svc.getLeadById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+
+    const { generateLeadReport } = require('../services/ai.service');
+    const reportContent = await generateLeadReport(lead);
+
+    await svc.updateLead(lead.id, { reportIA: true, reportContent, updatedAt: nowISO() },
+      req.user.userId, req.user.name, req.user.role);
+
+    if (lead.stage === '01' || lead.stage === '02') {
+      await svc.updateLeadStage(lead.id, '03', req.user.userId, req.user.name, req.user.role,
+        'Reporte IA generado');
+    }
+
+    await svc.addActivityLog(lead.id, req.user.userId, req.user.name, req.user.role,
+      'Reporte IA generado', 'Análisis IA completado — 6 secciones', '03');
+
+    const updated = await svc.getLeadById(lead.id);
+    res.json({ success: true, lead: updated });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
