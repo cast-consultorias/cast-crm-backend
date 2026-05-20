@@ -68,7 +68,7 @@ async function findRowIndex(sheet, colA, value) {
 // ─── LEADS ───────────────────────────────────────────────────────────────────
 async function getAllLeads() {
   const rows = await getRange(SHEETS.LEADS, 'A:AN');
-  return rows.slice(1).map(rowToLead).filter(Boolean);
+  return rows.slice(1).map(rowToLead).filter(l => l && l.stage !== 'deleted');
 }
 
 async function getLeadById(id) {
