@@ -100,6 +100,25 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
       }
     }
 
+    // Auto-trigger AI analysis when moved to stage 02 (skip if report already exists)
+    if (newStage === '02' && !lead.reportIA) {
+      try {
+        const { generateLeadReport } = require('../services/ai.service');
+        const reportContent = await generateLeadReport(updated);
+        await svc.updateLead(updated.id, { reportIA: true, reportContent, updatedAt: nowISO() },
+          req.user.userId, req.user.name, req.user.role);
+        await svc.updateLeadStage(updated.id, '03', req.user.userId, req.user.name, req.user.role,
+          'Reporte IA generado automáticamente');
+        await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
+          'Reporte IA generado', 'Análisis IA completado automáticamente al mover a Etapa 02', '03');
+        const finalLead = await svc.getLeadById(updated.id);
+        return res.json({ lead: finalLead });
+      } catch (aiErr) {
+        console.warn('Auto AI report failed:', aiErr.message);
+        // Fall through — return lead at stage 02 so the user can retry manually
+      }
+    }
+
     res.json({ lead: updated });
   } catch (e) { next(e); }
 });
