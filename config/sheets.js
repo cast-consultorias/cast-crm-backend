@@ -23,6 +23,7 @@ const LEAD_COLS = {
   notes:27, createdAt:28, updatedAt:29, entryType:30, driveFolderId:31,
   loomUrl:32, deliverableUrl:33, nextAction:34, nextActionDate:35,
   nextActionAssignee:36, closedLostReason:37, closedLostCategory:38, recontactDate:39,
+  reportContent:40, leadCode:41,
 };
 
 const LEAD_HEADERS = [
@@ -31,7 +32,7 @@ const LEAD_HEADERS = [
   'tier','reportIA','blueprintDone','ivcRS','ivcPP','ivcRT','ivcES','ivcScore',
   'slaActive','slaStartTime','notes','createdAt','updatedAt','entryType','driveFolderId',
   'loomUrl','deliverableUrl','nextAction','nextActionDate','nextActionAssignee',
-  'closedLostReason','closedLostCategory','recontactDate',
+  'closedLostReason','closedLostCategory','recontactDate','reportContent','leadCode',
 ];
 
 module.exports = { SPREADSHEET_ID, SHEETS, LEAD_COLS, LEAD_HEADERS };

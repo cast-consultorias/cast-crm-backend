@@ -49,6 +49,7 @@ function rowToLead(row) {
     closedLostCategory: row[38]||null,
     recontactDate:      row[39]||null,
     reportContent:      toStr(row[40])||null,
+    leadCode:           row[41]||null,
   };
 }
 
@@ -65,7 +66,7 @@ function leadToRow(lead) {
     lead.driveFolderId||'', lead.loomUrl||'', lead.deliverableUrl||'',
     lead.nextAction||'', lead.nextActionDate||'', lead.nextActionAssignee||'',
     lead.closedLostReason||'', lead.closedLostCategory||'', lead.recontactDate||'',
-    lead.reportContent||'',
+    lead.reportContent||'', lead.leadCode||'',
   ];
 }
 

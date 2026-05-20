@@ -67,8 +67,20 @@ async function findRowIndex(sheet, colA, value) {
 
 // ─── LEADS ───────────────────────────────────────────────────────────────────
 async function getAllLeads() {
-  const rows = await getRange(SHEETS.LEADS, 'A:AO');
+  const rows = await getRange(SHEETS.LEADS, 'A:AP');
   return rows.slice(1).map(rowToLead).filter(l => l && l.stage !== 'deleted');
+}
+
+async function generateLeadCode() {
+  const year  = new Date().getFullYear();
+  const leads = await getAllLeads();
+  const prefix = `CAST-${year}-`;
+  const nums = leads
+    .map(l => l.leadCode)
+    .filter(c => c && c.startsWith(prefix))
+    .map(c => parseInt(c.replace(prefix, '')) || 0);
+  const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+  return `${prefix}${String(next).padStart(3, '0')}`;
 }
 
 async function getLeadById(id) {
@@ -77,12 +89,13 @@ async function getLeadById(id) {
 }
 
 async function createLead(leadData, userId, userName, userRole) {
-  const id    = uuidv4();
-  const now   = nowDate();
-  const level = getLevel(parseInt(leadData.score) || 0);
+  const id       = uuidv4();
+  const now      = nowDate();
+  const level    = getLevel(parseInt(leadData.score) || 0);
+  const leadCode = await generateLeadCode();
 
   const lead = {
-    ...leadData, id, level,
+    ...leadData, id, level, leadCode,
     createdAt: now, updatedAt: now,
     reportIA: false, blueprintDone: false,
     ivcRS:0, ivcPP:0, ivcRT:0, ivcES:0, ivcScore: null,
@@ -337,6 +350,7 @@ function mergeBlueprintRow(existing, updates) {
 
 module.exports = {
   getAllLeads, getLeadById, createLead, updateLead, updateLeadStage, deleteLead,
+  generateLeadCode,
   addActivityLog, getActivityByLeadId,
   getBlueprintByLeadId, createBlueprint, updateBlueprint, approveBlueprint,
   addAttachment, getAttachmentsByLeadId,
