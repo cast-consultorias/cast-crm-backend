@@ -205,6 +205,7 @@ async function syncExternalLeads() {
         await svc.updateLead(newLead.id, { driveFolderId: folderId }, 'sync', 'Sync Externo', 'Sistema');
       } catch (driveErr) {
         console.warn(`Drive folder creation failed for ${nombre}:`, driveErr.message);
+        results.errors.push({ row: i + 1, email, name: nombre, action: 'drive_folder', error: driveErr.message });
       }
 
       await setCellValue(SCORING_SHEET_ID, scoringTab, i + 1, 13, 'En CRM');
@@ -268,6 +269,7 @@ async function syncExternalLeads() {
           await svc.updateLead(newLead.id, { driveFolderId: folderId }, 'sync', 'Sync Externo', 'Sistema');
         } catch (driveErr) {
           console.warn(`Drive folder creation failed for ${nombre}:`, driveErr.message);
+          results.errors.push({ row: i + 1, email, name: nombre, source: 'forms', action: 'drive_folder', error: driveErr.message });
         }
 
         await setCellValue(FORMS_SHEET_ID, formsTab, i + 1, 34, 'En CRM');

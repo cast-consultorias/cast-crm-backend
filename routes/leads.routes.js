@@ -178,6 +178,19 @@ router.get('/:id/folder', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /api/leads/:id/create-drive-folder — crea carpeta Drive retroactivamente
+router.post('/:id/create-drive-folder', auth, async (req, res, next) => {
+  try {
+    const lead = await svc.getLeadById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
+    if (lead.driveFolderId) return res.json({ alreadyExists: true, folderId: lead.driveFolderId });
+
+    const { folderId, webViewLink } = await driveSvc.createLeadFolder(lead);
+    await svc.updateLead(lead.id, { driveFolderId: folderId }, req.user.userId, req.user.name, req.user.role);
+    res.json({ success: true, folderId, webViewLink });
+  } catch (e) { next(e); }
+});
+
 // POST /api/leads/sync-external — CEO only
 // Importa leads nuevos desde los sheets externos de scoring
 router.post('/sync-external', auth, ceoOnly, async (req, res, next) => {
