@@ -1,4 +1,4 @@
-const { getDrive } = require('../config/google');
+const { getDrive, getDriveImpersonated } = require('../config/google');
 require('dotenv').config();
 
 const ROOT    = process.env.DRIVE_ROOT_FOLDER_ID;
@@ -29,7 +29,7 @@ async function moveLeadFolder(folderId, destination) {
 }
 
 async function uploadFileToDrive(folderId, fileName, mimeType, fileBuffer) {
-  const drive = await getDrive();
+  const drive = getDriveImpersonated();
   const { Readable } = require('stream');
   const stream = Readable.from(fileBuffer);
   const res = await drive.files.create({

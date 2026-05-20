@@ -32,7 +32,9 @@ function getImpersonatedClient(scopes) {
 
 const getSheets   = async () => google.sheets({ version: 'v4', auth: await auth.getClient() });
 const getDrive    = async () => google.drive({ version: 'v3',  auth: await auth.getClient() });
+// Impersona a carlos@ para subir archivos (las cuentas de servicio no tienen cuota de almacenamiento)
+const getDriveImpersonated = () => google.drive({ version: 'v3', auth: getImpersonatedClient(['https://www.googleapis.com/auth/drive']) });
 const getGmail    = async () => google.gmail({ version: 'v1',  auth: getImpersonatedClient(['https://www.googleapis.com/auth/gmail.send']) });
 const getCalendar = async () => google.calendar({ version: 'v3', auth: getImpersonatedClient(['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/calendar.events']) });
 
-module.exports = { auth, getSheets, getDrive, getGmail, getCalendar };
+module.exports = { auth, getSheets, getDrive, getDriveImpersonated, getGmail, getCalendar };
