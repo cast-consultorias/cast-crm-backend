@@ -1,5 +1,6 @@
 const { getSheets } = require('../config/google');
-const svc = require('./sheets.service');
+const svc      = require('./sheets.service');
+const driveSvc = require('./drive.service');
 const { getLevel } = require('./ivc.service');
 
 const SCORING_SHEET_ID = process.env.EXTERNAL_SCORING_SHEET_ID;
@@ -179,7 +180,7 @@ async function syncExternalLeads() {
       if (row[3])  noteParts.push(`Etiqueta: ${row[3]}`);
 
       const levelFinal = ['A','B','C','D'].includes(grado) ? grado : getLevel(score);
-      await svc.createLead({
+      const newLead = await svc.createLead({
         name: nombre, company: '—', email,
         phone:        cleanPhone(row[7] || ''),
         country:      (row[8] || '🇨🇴 Colombia').trim(),
@@ -197,6 +198,14 @@ async function syncExternalLeads() {
         entryType:    'automatic',
         flowType:     ['A','B'].includes(levelFinal) ? 'Flujo 2' : '',
       }, 'sync', 'Sync Externo', 'Sistema');
+
+      // Crear carpeta en Drive para el nuevo lead
+      try {
+        const { folderId } = await driveSvc.createLeadFolder(newLead);
+        await svc.updateLead(newLead.id, { driveFolderId: folderId }, 'sync', 'Sync Externo', 'Sistema');
+      } catch (driveErr) {
+        console.warn(`Drive folder creation failed for ${nombre}:`, driveErr.message);
+      }
 
       await setCellValue(SCORING_SHEET_ID, scoringTab, i + 1, 13, 'En CRM');
       existingByEmail.set(email, { email });
@@ -234,7 +243,7 @@ async function syncExternalLeads() {
         if (r[11]) noteParts.push(`Objetivo: ${r[11]}`);
         if (r[6])  noteParts.push(`Rol: ${r[6]}`);
 
-        await svc.createLead({
+        const newLead = await svc.createLead({
           name: nombre, company: '—', email,
           phone:        cleanPhone(r[4] || ''),
           country:      (r[5] || '🇨🇴 Colombia').trim() || '🇨🇴 Colombia',
@@ -252,6 +261,14 @@ async function syncExternalLeads() {
           entryType:    'automatic',
           flowType:     ['A','B'].includes(level) ? 'Flujo 2' : '',
         }, 'sync', 'Sync Externo', 'Sistema');
+
+        // Crear carpeta en Drive para el nuevo lead
+        try {
+          const { folderId } = await driveSvc.createLeadFolder(newLead);
+          await svc.updateLead(newLead.id, { driveFolderId: folderId }, 'sync', 'Sync Externo', 'Sistema');
+        } catch (driveErr) {
+          console.warn(`Drive folder creation failed for ${nombre}:`, driveErr.message);
+        }
 
         await setCellValue(FORMS_SHEET_ID, formsTab, i + 1, 34, 'En CRM');
         existingByEmail.set(email, { email });
