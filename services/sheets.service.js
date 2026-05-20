@@ -103,14 +103,18 @@ async function createLead(leadData, userId, userName, userRole) {
 }
 
 async function updateLead(id, updates, userId, userName, userRole) {
-  const leads = await getAllLeads();
-  const idx   = leads.findIndex(l => String(l.id) === String(id));
-  if (idx === -1) throw new Error('Lead no encontrado');
+  // Read ALL rows (including deleted) to find the true sheet row index.
+  // Using getAllLeads() (filtered) would give a wrong index when deleted rows
+  // exist above the target row, causing updateRow to overwrite the wrong row.
+  const allRows = await getRange(SHEETS.LEADS, 'A:AN');
+  const rowIdx  = allRows.findIndex((r, i) => i > 0 && r[0] === String(id));
+  if (rowIdx === -1) throw new Error('Lead no encontrado');
 
-  const updated = { ...leads[idx], ...updates, updatedAt: nowISO() };
+  const lead    = rowToLead(allRows[rowIdx]);
+  const updated = { ...lead, ...updates, updatedAt: nowISO() };
   if (updates.score !== undefined) updated.level = getLevel(parseInt(updates.score));
 
-  await updateRow(SHEETS.LEADS, idx, leadToRow(updated));
+  await updateRow(SHEETS.LEADS, rowIdx - 1, leadToRow(updated));
   return updated;
 }
 
