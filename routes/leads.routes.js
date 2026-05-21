@@ -112,8 +112,8 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
 
     const updated = await svc.updateLeadStage(req.params.id, newStage, req.user.userId, req.user.name, req.user.role, reason);
 
-    // Auto-send booking invitation email when moved to stage 04
-    if (newStage === '04' && lead.email) {
+    // Auto-send booking invitation email when moved to stage 04 (only if not already there)
+    if (newStage === '04' && lead.stage !== '04' && lead.email) {
       const leadToEmail = { ...updated, email: updated.email || lead.email };
       try {
         const msgId = await gmailSvc.sendBookingInvitation(leadToEmail);
