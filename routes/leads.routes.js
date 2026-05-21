@@ -198,35 +198,33 @@ router.get('/:id/folder', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /api/leads/:id/export-pdf/report — genera PDF del Reporte IA y sube a Drive
+// POST /api/leads/:id/export-pdf/report — genera PDF del Reporte IA y lo descarga
 router.post('/:id/export-pdf/report', auth, async (req, res, next) => {
   try {
     const lead = await svc.getLeadById(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
     if (!lead.reportContent) return res.status(400).json({ error: 'El lead no tiene Reporte IA generado' });
-    if (!lead.driveFolderId) return res.status(400).json({ error: 'El lead no tiene carpeta Drive. Créala primero desde la tab Soportes.' });
-
     const pdfBuffer = await pdfSvc.generateReportPDF(lead);
     const fileName = `Reporte_IA_${lead.name.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    const uploaded = await driveSvc.uploadFileToDrive(lead.driveFolderId, fileName, 'application/pdf', pdfBuffer);
-    await svc.addAttachment(lead.id, { name: fileName, type: 'document', url: uploaded.webViewLink, driveFileId: uploaded.fileId, stageAt: lead.stage, description: 'Reporte IA generado automáticamente', size: pdfBuffer.length }, req.user.userId);
-    res.json({ success: true, fileName, webViewLink: uploaded.webViewLink });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
   } catch (e) { next(e); }
 });
 
-// POST /api/leads/:id/export-pdf/ivc — genera PDF de la Evaluación IVC y sube a Drive
+// POST /api/leads/:id/export-pdf/ivc — genera PDF de la Evaluación IVC y lo descarga
 router.post('/:id/export-pdf/ivc', auth, async (req, res, next) => {
   try {
     const lead = await svc.getLeadById(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
     if (!lead.blueprintSession) return res.status(400).json({ error: 'El lead no tiene Blueprint Session completada' });
-    if (!lead.driveFolderId) return res.status(400).json({ error: 'El lead no tiene carpeta Drive. Créala primero desde la tab Soportes.' });
-
     const pdfBuffer = await pdfSvc.generateIVCPDF(lead);
     const fileName = `Evaluacion_IVC_${lead.name.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    const uploaded = await driveSvc.uploadFileToDrive(lead.driveFolderId, fileName, 'application/pdf', pdfBuffer);
-    await svc.addAttachment(lead.id, { name: fileName, type: 'document', url: uploaded.webViewLink, driveFileId: uploaded.fileId, stageAt: lead.stage, description: 'Evaluación IVC · Blueprint Session™', size: pdfBuffer.length }, req.user.userId);
-    res.json({ success: true, fileName, webViewLink: uploaded.webViewLink });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
   } catch (e) { next(e); }
 });
 
