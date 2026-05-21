@@ -116,6 +116,11 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
 
     const updated = await svc.updateLeadStage(req.params.id, newStage, req.user.userId, req.user.name, req.user.role, reason);
 
+    // When a lead leaves stage 04, reset the dedup guard so re-entering 04 re-sends the email.
+    if (lead.stage === '04' && newStage !== '04') {
+      bookingEmailSentLeads.delete(req.params.id);
+    }
+
     // Auto-send booking invitation email when moved to stage 04 (only if not already there)
     // bookingEmailSentLeads guards against race conditions where two simultaneous PATCH
     // requests both see lead.stage !== '04' before Sheets commits the first update.
