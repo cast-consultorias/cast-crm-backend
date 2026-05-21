@@ -29,7 +29,7 @@ async function moveLeadFolder(folderId, destination) {
 }
 
 async function uploadFileToDrive(folderId, fileName, mimeType, fileBuffer) {
-  const drive = getDriveImpersonated();
+  const drive = await getDriveImpersonated();
   const { Readable } = require('stream');
   const stream = Readable.from(fileBuffer);
   const res = await drive.files.create({
