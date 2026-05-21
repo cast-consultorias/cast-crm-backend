@@ -109,8 +109,10 @@ router.post('/n8n/report-ready', async (req, res, next) => {
 // POST /api/webhooks/calcom/booking-created
 router.post('/calcom/booking-created', async (req, res, next) => {
   try {
+    console.log('[calcom-webhook] raw body:', JSON.stringify(req.body, null, 2));
     const payload  = req.body?.payload || req.body;
     const attendee = payload.attendees?.[0] || payload.attendee;
+    console.log('[calcom-webhook] parsed — leadId:', payload.metadata?.leadId, '| attendee email:', attendee?.email);
 
     // Try leadId from metadata first, then fall back to attendee email
     let lead = null;
