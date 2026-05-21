@@ -9,6 +9,11 @@ const CALCOM_BOOK_URL = process.env.CALCOM_BOOKING_URL  || 'https://cal.com/cast
 function buildEmail(to, subject, htmlBody, replyTo = FROM_EMAIL) {
   const boundary = `cast_${Date.now()}`;
   const encodedFromName = `=?UTF-8?B?${Buffer.from(FROM_NAME).toString('base64')}?=`;
+  const plainText = htmlBody
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s{2,}/g, '\n')
+    .trim();
   const raw = [
     `From: ${encodedFromName} <${FROM_EMAIL}>`,
     `To: ${to}`,
@@ -16,6 +21,11 @@ function buildEmail(to, subject, htmlBody, replyTo = FROM_EMAIL) {
     `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    plainText,
     '',
     `--${boundary}`,
     'Content-Type: text/html; charset=UTF-8',
