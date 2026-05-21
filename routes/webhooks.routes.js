@@ -73,6 +73,12 @@ router.post('/n8n/report-ready', async (req, res, next) => {
         }, 'n8n', 'Auto-routing', 'Sistema');
         await svc.updateLeadStage(leadId, '04', 'n8n', 'Auto-routing', 'Sistema',
           'Nivel A — Fast Track: Blueprint directo con Carlos Suárez');
+        if (lead.email) {
+          gmailSvc.sendBookingInvitation(lead).then(msgId => {
+            console.log(`[email] Booking invitation sent OK (webhook A) to ${lead.email} — msgId: ${msgId}`);
+            svc.addActivityLog(leadId, 'n8n', 'Auto-routing', 'Sistema', 'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
+          }).catch(e => console.error(`[email] Booking invitation FAILED (webhook A) to ${lead.email}:`, e.message));
+        }
 
       } else if (level === 'B') {
         // Blueprint con Coordinadora
@@ -83,6 +89,12 @@ router.post('/n8n/report-ready', async (req, res, next) => {
         }, 'n8n', 'Auto-routing', 'Sistema');
         await svc.updateLeadStage(leadId, '04', 'n8n', 'Auto-routing', 'Sistema',
           'Nivel B — Blueprint con Coordinadora (Eusimary Contreras)');
+        if (lead.email) {
+          gmailSvc.sendBookingInvitation(lead).then(msgId => {
+            console.log(`[email] Booking invitation sent OK (webhook B) to ${lead.email} — msgId: ${msgId}`);
+            svc.addActivityLog(leadId, 'n8n', 'Auto-routing', 'Sistema', 'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
+          }).catch(e => console.error(`[email] Booking invitation FAILED (webhook B) to ${lead.email}:`, e.message));
+        }
 
       } else if (level === 'C') {
         // Nurturing

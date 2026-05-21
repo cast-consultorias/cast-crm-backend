@@ -140,12 +140,6 @@ async function updateLeadStage(id, newStage, userId, userName, userRole, reason 
   const updated = await updateLead(id, stageUpdates, userId, userName, userRole);
   await addActivityLog(id, userId, userName, userRole, `Movido a Etapa ${newStage}`, reason || `Stage cambiado a ${newStage}`, newStage);
 
-  // Automaciones por etapa
-  if (newStage === '04') {
-    const { sendBookingInvitation } = require('./gmail.service');
-    sendBookingInvitation(updated).catch(e => console.warn('Booking invitation failed:', e.message));
-  }
-
   if (newStage === '17') {
     fireWebhook(process.env.N8N_NURTURING, {
       leadId: id, name: updated.name, email: updated.email,
