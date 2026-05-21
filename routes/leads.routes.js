@@ -5,6 +5,7 @@ const ceoOnly = require('../middleware/ceo');
 const svc     = require('../services/sheets.service');
 const driveSvc= require('../services/drive.service');
 const pdfSvc  = require('../services/pdf.service');
+const gmailSvc= require('../services/gmail.service');
 const { leadSchema, stageSchema, validate } = require('../utils/validators');
 const { nowISO } = require('../utils/dateUtils');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -110,6 +111,13 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
     if (['18'].includes(newStage) && !req.user.isCEO) return res.status(403).json({ error: 'Solo el CEO puede marcar como Closed Lost' });
 
     const updated = await svc.updateLeadStage(req.params.id, newStage, req.user.userId, req.user.name, req.user.role, reason);
+
+    // Auto-send booking invitation email when moved to stage 04
+    if (newStage === '04' && lead.email) {
+      gmailSvc.sendBookingInvitation(updated).catch(e => console.warn('Booking invitation email failed:', e.message));
+      await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
+        'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
+    }
 
     // Move Drive folder on terminal stages
     if (lead.driveFolderId) {
