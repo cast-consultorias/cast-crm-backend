@@ -10,6 +10,10 @@ const { leadSchema, stageSchema, validate } = require('../utils/validators');
 const { nowISO } = require('../utils/dateUtils');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// In-memory dedup: prevents double emails when two simultaneous PATCH requests
+// race before Sheets updates the stage. Cleared on server restart (acceptable).
+const bookingEmailSentLeads = new Set();
+
 // GET /api/leads/debug/drive-auth — diagnóstico temporal de impersonación
 router.get('/debug/drive-auth', auth, async (req, res) => {
   const { JWT } = require('google-auth-library');
@@ -113,7 +117,10 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
     const updated = await svc.updateLeadStage(req.params.id, newStage, req.user.userId, req.user.name, req.user.role, reason);
 
     // Auto-send booking invitation email when moved to stage 04 (only if not already there)
-    if (newStage === '04' && lead.stage !== '04' && lead.email) {
+    // bookingEmailSentLeads guards against race conditions where two simultaneous PATCH
+    // requests both see lead.stage !== '04' before Sheets commits the first update.
+    if (newStage === '04' && lead.stage !== '04' && lead.email && !bookingEmailSentLeads.has(req.params.id)) {
+      bookingEmailSentLeads.add(req.params.id);
       const leadToEmail = { ...updated, email: updated.email || lead.email };
       try {
         const msgId = await gmailSvc.sendBookingInvitation(leadToEmail);
@@ -121,6 +128,7 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
         await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
           'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
       } catch (emailErr) {
+        bookingEmailSentLeads.delete(req.params.id); // allow retry if send failed
         console.error(`[email] Booking invitation FAILED to ${leadToEmail.email}:`, emailErr.message);
         await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
           'Error de email', `Email 00: Falló el envío — ${emailErr.message}`, '04').catch(() => {});
