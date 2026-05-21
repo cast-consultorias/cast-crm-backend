@@ -159,6 +159,16 @@ router.post('/calcom/booking-created', async (req, res, next) => {
 
       await svc.updateLeadStage(lead.id, '05', 'calcom', 'Cal.com', 'Sistema', `Sesión agendada via cal.com: ${date} ${time}`);
       await svc.addActivityLog(lead.id, 'calcom', 'Cal.com', 'Sistema', 'Sesión agendada', `Blueprint Session agendada: ${date} ${time} · Meet: ${meetLink}`, '05');
+
+      // Auto-send session confirmation email
+      if (lead.email) {
+        gmailSvc.sendSessionConfirmed(lead, date, time, meetLink)
+          .then(msgId => {
+            console.log(`[email] Session confirmed sent OK to ${lead.email} — msgId: ${msgId}`);
+            svc.addActivityLog(lead.id, 'calcom', 'Cal.com', 'Sistema', 'Email enviado', `Email 1: Sesión confirmada (${date} ${time}) — enviado automáticamente`, '05');
+          })
+          .catch(e => console.error(`[email] Session confirmed FAILED to ${lead.email}:`, e.message));
+      }
     }
 
     res.json({ received: true, leadId: lead.id });
