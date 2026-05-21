@@ -146,8 +146,7 @@ router.post('/calcom/booking-created', async (req, res, next) => {
       }
 
       await svc.updateLeadStage(lead.id, '05', 'calcom', 'Cal.com', 'Sistema', `Sesión agendada via cal.com: ${date} ${time}`);
-      await gmailSvc.sendSessionConfirmed(lead, date, time, meetLink, 120).catch(e => console.warn('Email 01 failed:', e.message));
-      await svc.addActivityLog(lead.id, 'calcom', 'Cal.com', 'Sistema', 'Email enviado', `Email 01 — Sesión Blueprint confirmada: ${date} ${time}`, '05');
+      await svc.addActivityLog(lead.id, 'calcom', 'Cal.com', 'Sistema', 'Sesión agendada', `Blueprint Session agendada: ${date} ${time} · Meet: ${meetLink}`, '05');
     }
 
     res.json({ received: true, leadId: lead.id });
