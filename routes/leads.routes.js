@@ -9,6 +9,25 @@ const { leadSchema, stageSchema, validate } = require('../utils/validators');
 const { nowISO } = require('../utils/dateUtils');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// GET /api/leads/debug/drive-auth — diagnóstico temporal de impersonación
+router.get('/debug/drive-auth', auth, async (req, res) => {
+  const { JWT } = require('google-auth-library');
+  const { google } = require('googleapis');
+  const email   = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const subject = process.env.GMAIL_SENDER;
+  const key     = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  try {
+    const jwt = new JWT({ email, key, scopes: ['https://www.googleapis.com/auth/drive'], subject });
+    const creds = await jwt.authorize();
+    const drive = google.drive({ version: 'v3', auth: jwt });
+    const list  = await drive.files.list({ pageSize: 1, fields: 'files(id,name,owners)' });
+    const owner = list.data.files[0]?.owners?.[0]?.emailAddress || 'unknown';
+    res.json({ ok: true, impersonating: subject, serviceAccount: email, firstFileOwner: owner, hasToken: !!creds.access_token });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, serviceAccount: email, subject });
+  }
+});
+
 // GET /api/leads
 router.get('/', auth, async (req, res, next) => {
   try {
