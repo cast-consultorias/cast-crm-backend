@@ -114,9 +114,17 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
 
     // Auto-send booking invitation email when moved to stage 04
     if (newStage === '04' && lead.email) {
-      gmailSvc.sendBookingInvitation(updated).catch(e => console.warn('Booking invitation email failed:', e.message));
-      await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
-        'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
+      const leadToEmail = { ...updated, email: updated.email || lead.email };
+      try {
+        const msgId = await gmailSvc.sendBookingInvitation(leadToEmail);
+        console.log(`[email] Booking invitation sent OK to ${leadToEmail.email} — msgId: ${msgId}`);
+        await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
+          'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
+      } catch (emailErr) {
+        console.error(`[email] Booking invitation FAILED to ${leadToEmail.email}:`, emailErr.message);
+        await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
+          'Error de email', `Email 00: Falló el envío — ${emailErr.message}`, '04').catch(() => {});
+      }
     }
 
     // Move Drive folder on terminal stages
