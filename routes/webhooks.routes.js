@@ -127,8 +127,10 @@ router.post('/calcom/booking-created', async (req, res, next) => {
     if (!lead) return res.json({ received: true, note: 'Lead not found' });
 
     const startTime = payload.startTime;
-    const date = startTime?.split('T')[0];
-    const time = startTime?.split('T')[1]?.substring(0, 5);
+    // Convert UTC to America/Bogota (UTC-5) for display in emails and stage log
+    const startDate = startTime ? new Date(startTime) : null;
+    const date = startDate ? startDate.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) : null;
+    const time = startDate ? startDate.toLocaleTimeString('en-GB', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }) : null;
     let meetLink = payload.videoCallData?.url || payload.metadata?.videoCallUrl || '';
 
     if (date && time) {
