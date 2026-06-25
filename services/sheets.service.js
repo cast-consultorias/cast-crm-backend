@@ -119,7 +119,7 @@ async function updateLead(id, updates, userId, userName, userRole) {
   // Read ALL rows (including deleted) to find the true sheet row index.
   // Using getAllLeads() (filtered) would give a wrong index when deleted rows
   // exist above the target row, causing updateRow to overwrite the wrong row.
-  const allRows = await getRange(SHEETS.LEADS, 'A:AO');
+  const allRows = await getRange(SHEETS.LEADS, 'A:AP');
   const rowIdx  = allRows.findIndex((r, i) => i > 0 && r[0] === String(id));
   if (rowIdx === -1) throw new Error('Lead no encontrado');
 

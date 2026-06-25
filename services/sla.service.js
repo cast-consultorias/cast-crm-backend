@@ -43,11 +43,11 @@ function startSLAMonitor() {
 
         // ── Auto-avance 10 → 17 a los 8 días sin respuesta ───────
         if (lead.stage === '10' && h >= 192)
-          await autoAdvance(lead, '17', '8 días sin respuesta tras propuesta — pasando a Nurturing');
+          await autoAdvance(lead, '19', '8 días sin respuesta tras propuesta — pasando a Nurturing');
 
         // ── Auto-avance 05 → 17 a las 72h sin agendar sesión ─────
         if (lead.stage === '05' && h >= 72)
-          await autoAdvance(lead, '17', '72h en Prep. Sesión sin agendar Blueprint — pasando a Nurturing');
+          await autoAdvance(lead, '19', '72h en Prep. Sesión sin agendar Blueprint — pasando a Nurturing');
       }
 
       // ── Email follow-up 24h post entregable ──────────────────

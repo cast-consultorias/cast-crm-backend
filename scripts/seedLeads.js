@@ -1,6 +1,7 @@
 require('dotenv').config()
 const { getSheets } = require('../config/google')
 const { SPREADSHEET_ID, SHEET_LEADS } = require('../config/sheets')
+const { leadToRow } = require('../utils/formatters')
 
 const SEED_LEADS = [
   { id:1, name:'Juan Pérez', company:'TechStart Colombia', email:'juan@techstart.co', phone:'+573001234567', country:'🇨🇴 Colombia', sector:'Tecnología', score:92, level:'A', stage:'01', valueUSD:45000, probability:85, painType:'Estratégico', projectStage:'Idea', source:'Web', assignee:'Carlos Suárez', flowType:'', tier:'', reportIA:false, blueprintDone:false, ivcRS:0, ivcPP:0, ivcRT:0, ivcES:0, ivcScore:'', slaActive:false, slaStartTime:'', notes:'', createdAt:'2026-05-12', updatedAt:'2026-05-12', entryType:'automatic', nextAction:'Activar análisis IA', nextActionDate:'2026-05-13', nextActionAssignee:'Carlos Suárez', loomUrl:'', deliverableUrl:'', driveFolderId:'' },
@@ -17,14 +18,11 @@ const SEED_LEADS = [
 
 async function seed() {
   const sheets = await getSheets()
-  const rows = SEED_LEADS.map(l => [
-    l.id, l.name, l.company, l.email, l.phone, l.country, l.sector,
-    l.score, l.level, l.stage, l.valueUSD, l.probability, l.painType,
-    l.projectStage, l.source, l.assignee, l.flowType, l.tier,
-    l.reportIA, l.blueprintDone, l.ivcRS, l.ivcPP, l.ivcRT, l.ivcES, l.ivcScore,
-    l.slaActive, l.slaStartTime, l.notes, l.createdAt, l.updatedAt, l.entryType,
-    l.nextAction, l.nextActionDate, l.nextActionAssignee, l.loomUrl, l.deliverableUrl, l.driveFolderId
-  ])
+  const rows = SEED_LEADS.map(l => leadToRow({
+    closedLostReason: '', closedLostCategory: '', recontactDate: null,
+    reportContent: null, leadCode: null,
+    ...l,
+  }))
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,

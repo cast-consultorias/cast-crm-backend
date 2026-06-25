@@ -328,14 +328,14 @@ async function updateLeadStage(id, newStage, userId, userName, userRole, reason 
   const updated = await updateLead(id, stageUpdates, userId, userName, userRole);
   await addActivityLog(id, userId, userName, userRole, `Movido a Etapa ${newStage}`, reason || `Stage cambiado a ${newStage}`, newStage);
 
-  if (newStage === '17') {
+  if (newStage === '19') {
     fireWebhook(process.env.N8N_NURTURING, {
       leadId: id, name: updated.name, email: updated.email,
       sector: updated.sector, level: updated.level,
     });
   }
 
-  if (newStage === '18') {
+  if (newStage === '20') {
     addToClosedLost(updated, updated.closedLostReason || reason || '', updated.closedLostCategory || '', false)
       .catch(() => {});
   }
@@ -508,7 +508,7 @@ async function getAllUsers() {
 
 async function getDashboardStats() {
   const leads = await getAllLeads();
-  const active = leads.filter(l => !['14', '15', '18', 'deleted'].includes(l.stage));
+  const active = leads.filter(l => !['14', '15', '16', '17', '20', 'deleted'].includes(l.stage));
   const won    = leads.filter(l => ['14', '15'].includes(l.stage));
 
   const levelDist = { A: 0, B: 0, C: 0, D: 0 };
