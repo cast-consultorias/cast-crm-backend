@@ -1,7 +1,7 @@
 const { VELOCITY_MAP, INVOLVEMENT_MAP, INVESTMENT_TIER } = require('../config/constants');
 
 function calculateIVC(rs, ppBase, q12Velocity, q14Involvement) {
-  const pp = ppBase / 10;
+  const pp = (10 - ppBase) / 10;
   const rt = VELOCITY_MAP[q12Velocity] || 5;
   const es = INVOLVEMENT_MAP[q14Involvement] || 5;
   if (!rs || !rt || !es) return null;
@@ -9,9 +9,9 @@ function calculateIVC(rs, ppBase, q12Velocity, q14Involvement) {
   return {
     ivcScore:      parseFloat(ivc.toFixed(2)),
     rs, pp, rt, es,
-    level:         ivc >= 7 ? 'high' : ivc >= 3 ? 'medium' : 'risk',
-    label:         ivc >= 7 ? 'ALTA CONVERSIÓN' : ivc >= 3 ? 'POTENCIAL MEDIO' : 'RIESGO ALTO',
-    tierSuggested: ivc >= 7 ? 'Premium' : ivc >= 3 ? 'Pro' : 'Esencial',
+    level:         ivc >= 1.2 ? 'high' : ivc >= 0.5 ? 'medium' : 'risk',
+    label:         ivc >= 1.2 ? 'ALTA CONVERSIÓN' : ivc >= 0.5 ? 'POTENCIAL MEDIO' : 'RIESGO ALTO',
+    tierSuggested: ivc >= 1.2 ? 'Premium' : ivc >= 0.5 ? 'Pro' : 'Esencial',
   };
 }
 
@@ -24,7 +24,7 @@ function getLevel(score) {
 
 function generateOutputEvaluation(lead, blueprint) {
   const ivcResult = blueprint.ivcCalculated
-    ? { ivcScore: blueprint.ivcCalculated, label: blueprint.ivcCalculated >= 7 ? 'ALTA CONVERSIÓN' : blueprint.ivcCalculated >= 3 ? 'POTENCIAL MEDIO' : 'RIESGO ALTO', tierSuggested: blueprint.ivcCalculated >= 7 ? 'Premium' : blueprint.ivcCalculated >= 3 ? 'Pro' : 'Esencial' }
+    ? { ivcScore: blueprint.ivcCalculated, label: blueprint.ivcCalculated >= 1.2 ? 'ALTA CONVERSIÓN' : blueprint.ivcCalculated >= 0.5 ? 'POTENCIAL MEDIO' : 'RIESGO ALTO', tierSuggested: blueprint.ivcCalculated >= 1.2 ? 'Premium' : blueprint.ivcCalculated >= 0.5 ? 'Pro' : 'Esencial' }
     : null;
 
   return {
