@@ -231,6 +231,28 @@ router.get('/:id/folder', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Guarda PDF en Drive + registra en attachments (fire-and-forget, no bloquea la descarga)
+async function savePDFToSoportes(lead, pdfBuffer, fileName, type, userId) {
+  try {
+    if (!lead.driveFolderId) return;
+    const { fileId, webViewLink } = await driveSvc.uploadFileToDrive(
+      lead.driveFolderId, fileName, 'application/pdf', pdfBuffer
+    );
+    await svc.addAttachment(lead.id, {
+      name:        fileName,
+      type:        type === 'report' ? 'Reporte IA' : 'Evaluación IVC',
+      url:         webViewLink,
+      driveFileId: fileId,
+      stageAt:     lead.stage,
+      description: type === 'report' ? 'Reporte de Análisis Estratégico generado por IA' : 'Output de Evaluación Blueprint Session™',
+      size:        `${(pdfBuffer.length / 1024).toFixed(0)} KB`,
+    }, userId);
+    console.log(`[pdf] Guardado en Drive y Soportes: ${fileName}`);
+  } catch (e) {
+    console.warn(`[pdf] No se pudo guardar en Drive/Soportes (${fileName}):`, e.message);
+  }
+}
+
 // POST /api/leads/:id/export-pdf/report — genera PDF del Reporte IA y lo descarga
 router.post('/:id/export-pdf/report', auth, async (req, res, next) => {
   try {
@@ -243,6 +265,7 @@ router.post('/:id/export-pdf/report', auth, async (req, res, next) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
+    savePDFToSoportes(lead, pdfBuffer, fileName, 'report', req.user?.id || 'sistema');
   } catch (e) { next(e); }
 });
 
@@ -260,6 +283,7 @@ router.post('/:id/export-pdf/ivc', auth, async (req, res, next) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
+    savePDFToSoportes(lead, pdfBuffer, fileName, 'ivc', req.user?.id || 'sistema');
   } catch (e) { next(e); }
 });
 
