@@ -568,7 +568,7 @@ function contractFromDb(row) {
     leadId:         row.lead_id,
     contractNumber: row.contract_number || '',
     totalValueCOP:  row.total_value_cop || 0,
-    concept:        row.concept || '',
+    concept:        (() => { try { const p = JSON.parse(row.concept||''); return Array.isArray(p) ? p : (row.concept ? [row.concept] : []) } catch { return row.concept ? [row.concept] : [] } })(),
     payments:       row.payments || DEFAULT_PAYMENTS,
     notes:          row.notes || '',
     createdAt:      row.created_at,
@@ -587,7 +587,7 @@ async function upsertContract(leadId, contractData) {
   const payload = {
     contract_number: contractData.contractNumber || '',
     total_value_cop: parseInt(contractData.totalValueCOP) || 0,
-    concept:         contractData.concept || '',
+    concept:         Array.isArray(contractData.concept) ? JSON.stringify(contractData.concept) : (contractData.concept || ''),
     payments:        contractData.payments || DEFAULT_PAYMENTS,
     notes:           contractData.notes || '',
     updated_at:      nowISO(),
