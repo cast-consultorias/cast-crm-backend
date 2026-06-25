@@ -296,9 +296,11 @@ async function recoverMissingLeads() {
 
   const scoringRows = await readSheet(SCORING_SHEET_ID, scoringTab, 'A:R');
 
-  // Emails actuales en Supabase
+  // Emails en Supabase — incluye eliminados para no recrearlos
   const existingLeads  = await svc.getAllLeads();
   const existingEmails = new Set(existingLeads.map(l => (l.email || '').toLowerCase().trim()));
+  const deletedEmails  = await svc.getDeletedLeadEmails();
+  for (const e of deletedEmails) existingEmails.add(e);
 
   // Leer Sheet 2 (formularios) para enriquecer datos si existen
   let formsLookup = {};

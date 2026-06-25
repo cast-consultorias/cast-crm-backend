@@ -552,8 +552,14 @@ async function addToClosedLost(lead, reason, category, recontact) {
   if (error) throw error;
 }
 
+async function getDeletedLeadEmails() {
+  const { data } = await supabase.from('leads').select('email').eq('stage', 'deleted');
+  return new Set((data || []).map(l => (l.email || '').toLowerCase().trim()).filter(Boolean));
+}
+
 module.exports = {
   getAllLeads, getLeadById, createLead, updateLead, updateLeadStage, deleteLead,
+  getDeletedLeadEmails,
   generateLeadCode,
   addActivityLog, getActivityByLeadId,
   getBlueprintByLeadId, createBlueprint, updateBlueprint, approveBlueprint,
