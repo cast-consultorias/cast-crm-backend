@@ -320,8 +320,10 @@ async function updateLead(id, updates, userId, userName, userRole) {
 async function updateLeadStage(id, newStage, userId, userName, userRole, reason = '') {
   const stageUpdates = { stage: newStage };
 
+  if (newStage === '05') { stageUpdates.slaStartTime = nowISO(); }
   if (newStage === '08') { stageUpdates.slaActive = true;  stageUpdates.slaStartTime = nowISO(); }
   if (newStage === '09') { stageUpdates.slaActive = false; stageUpdates.slaStartTime = nowISO(); }
+  if (newStage === '10') { stageUpdates.slaStartTime = nowISO(); }
 
   const updated = await updateLead(id, stageUpdates, userId, userName, userRole);
   await addActivityLog(id, userId, userName, userRole, `Movido a Etapa ${newStage}`, reason || `Stage cambiado a ${newStage}`, newStage);

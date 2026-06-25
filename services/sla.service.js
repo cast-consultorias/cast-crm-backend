@@ -13,31 +13,41 @@ async function fireN8NWebhook(type, lead) {
   } catch (e) { console.warn('N8N webhook failed:', e.message); }
 }
 
+async function autoAdvance(lead, toStage, reason) {
+  try {
+    await updateLead(lead.id, { stage: toStage, slaStartTime: new Date().toISOString() }, 'system', 'Sistema', 'Auto');
+    await addActivityLog(lead.id, 'system', 'Sistema', 'Auto', `Auto-avance →${toStage}`, reason, toStage);
+    console.log(`[auto-advance] ${lead.name} ${lead.stage}→${toStage}`);
+  } catch (e) { console.warn(`[auto-advance] Error ${lead.id}:`, e.message); }
+}
+
 function startSLAMonitor() {
   cron.schedule('*/15 * * * *', async () => {
     try {
       const leads = await getAllLeads();
       const now   = Date.now();
 
-      // ── SLA 48h alerts (stage 08 investigation) ──────────────
-      for (const lead of leads.filter(l => l.slaActive && l.slaStartTime)) {
-        const hoursElapsed = (now - new Date(lead.slaStartTime).getTime()) / 3600000;
-        if      (hoursElapsed >= 48) { await fireN8NWebhook('SLA_CRITICAL', lead); }
-        else if (hoursElapsed >= 42) { await fireN8NWebhook('SLA_URGENT',  lead); }
-        else if (hoursElapsed >= 24) { await fireN8NWebhook('SLA_WARNING', lead); }
-      }
+      for (const lead of leads.filter(l => l.slaStartTime)) {
+        const h = (now - new Date(lead.slaStartTime).getTime()) / 3600000;
 
-      // ── Auto-avance 09 → 10 a las 48h post-entregable ────────
-      for (const lead of leads.filter(l => l.stage === '09' && l.slaStartTime)) {
-        const hoursElapsed = (now - new Date(lead.slaStartTime).getTime()) / 3600000;
-        if (hoursElapsed >= 48) {
-          try {
-            await updateLead(lead.id, { stage: '10', slaStartTime: null }, 'system', 'Sistema', 'Auto');
-            await addActivityLog(lead.id, 'system', 'Sistema', 'Auto',
-              'Auto-avance 09→10', '48h transcurridas desde envío del entregable — coordinando 2da Reunión', '10');
-            console.log(`[auto-advance] Lead ${lead.id} (${lead.name}) movido 09→10 tras 48h`);
-          } catch (e) { console.warn(`[auto-advance] Error moviendo lead ${lead.id}:`, e.message); }
+        // ── SLA 48h alerts — stage 08 investigación ──────────────
+        if (lead.stage === '08' && lead.slaActive) {
+          if      (h >= 48) await fireN8NWebhook('SLA_CRITICAL', lead);
+          else if (h >= 42) await fireN8NWebhook('SLA_URGENT',   lead);
+          else if (h >= 24) await fireN8NWebhook('SLA_WARNING',  lead);
         }
+
+        // ── Auto-avance 09 → 10 a las 48h post-entregable ────────
+        if (lead.stage === '09' && h >= 48)
+          await autoAdvance(lead, '10', '48h transcurridas desde envío del entregable — coordinando 2da Reunión');
+
+        // ── Auto-avance 10 → 17 a los 8 días sin respuesta ───────
+        if (lead.stage === '10' && h >= 192)
+          await autoAdvance(lead, '17', '8 días sin respuesta tras propuesta — pasando a Nurturing');
+
+        // ── Auto-avance 05 → 17 a las 72h sin agendar sesión ─────
+        if (lead.stage === '05' && h >= 72)
+          await autoAdvance(lead, '17', '72h en Prep. Sesión sin agendar Blueprint — pasando a Nurturing');
       }
 
       // ── Email follow-up 24h post entregable ──────────────────
