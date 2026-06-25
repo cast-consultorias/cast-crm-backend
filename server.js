@@ -58,14 +58,14 @@ app.use(require('./middleware/errorHandler'));
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function init() {
   try {
-    // Verify Google Sheets connection
-    const { getSheets } = require('./config/google');
-    const { SPREADSHEET_ID } = require('./config/sheets');
-    const sheets = await getSheets();
-    await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
-    console.log('✅ Google Sheets conectado');
+    // Verify Supabase connection
+    const { createClient } = require('@supabase/supabase-js');
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+    const { error } = await sb.from('users').select('id', { head: true, count: 'exact' });
+    if (error) throw new Error(`Supabase: ${error.message}`);
+    console.log('✅ Supabase conectado');
 
-    // Verify Drive structure
+    // Verify Drive structure (Gmail/Calendar siguen usando Google APIs)
     const { ensureFolderStructure } = require('./services/drive.service');
     await ensureFolderStructure();
     console.log('✅ Google Drive verificado');
@@ -86,11 +86,9 @@ async function init() {
     });
   } catch (error) {
     console.error('❌ Error al inicializar:', error.message);
-    console.error('💡 Verifica que SPREADSHEET_ID y las credenciales de Google estén configuradas en .env');
-    // Start without Google integration in dev mode
     if (process.env.NODE_ENV !== 'production') {
       const PORT = process.env.PORT || 3001;
-      app.listen(PORT, () => console.log(`⚠️  Servidor iniciado sin Google APIs en puerto ${PORT}`));
+      app.listen(PORT, () => console.log(`⚠️  Servidor iniciado con errores en puerto ${PORT}`));
     } else {
       process.exit(1);
     }

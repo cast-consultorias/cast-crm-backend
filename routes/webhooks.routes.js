@@ -1,10 +1,11 @@
 const router = require('express').Router();
-const svc      = require('../services/sheets.service');
+const svc      = require('../services/supabase.service');
 const calSvc   = require('../services/calendar.service');
 const gmailSvc = require('../services/gmail.service');
 const driveSvc = require('../services/drive.service');
 const { getLevel } = require('../services/ivc.service');
 const { nowISO } = require('../utils/dateUtils');
+const { bookingEmailSentLeads } = require('../utils/emailDedup');
 
 function verifySecret(req, res) {
   const secret = req.headers['x-cast-secret'];
@@ -156,6 +157,9 @@ router.post('/calcom/booking-created', async (req, res, next) => {
           console.warn('Google Calendar event creation failed:', e.message);
         }
       }
+
+      // Clear dedup guard so re-entering 04 (e.g. on cancellation) re-sends the invitation
+      bookingEmailSentLeads.delete(lead.id);
 
       await svc.updateLeadStage(lead.id, '05', 'calcom', 'Cal.com', 'Sistema', `Sesión agendada via cal.com: ${date} ${time}`);
       await svc.addActivityLog(lead.id, 'calcom', 'Cal.com', 'Sistema', 'Sesión agendada', `Blueprint Session agendada: ${date} ${time} · Meet: ${meetLink}`, '05');

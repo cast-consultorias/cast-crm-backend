@@ -2,7 +2,7 @@ const router  = require('express').Router();
 const jwt     = require('jsonwebtoken');
 const bcrypt  = require('bcryptjs');
 const auth    = require('../middleware/auth');
-const { getUserByEmail, updateLastLogin } = require('../services/sheets.service');
+const { getUserByEmail, updateLastLogin } = require('../services/supabase.service');
 const { loginSchema, validate } = require('../utils/validators');
 
 // POST /api/auth/login

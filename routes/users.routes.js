@@ -3,7 +3,7 @@ const bcrypt  = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const auth    = require('../middleware/auth');
 const ceoOnly = require('../middleware/ceo');
-const svc     = require('../services/sheets.service');
+const svc     = require('../services/supabase.service');
 const { SHEETS } = require('../config/sheets');
 const { nowISO } = require('../utils/dateUtils');
 

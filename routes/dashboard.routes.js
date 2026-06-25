@@ -1,7 +1,7 @@
 const router  = require('express').Router();
 const auth    = require('../middleware/auth');
 const ceoOnly = require('../middleware/ceo');
-const svc     = require('../services/sheets.service');
+const svc     = require('../services/supabase.service');
 
 router.get('/stats', auth, async (req, res, next) => {
   try {

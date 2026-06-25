@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const auth   = require('../middleware/auth');
-const svc    = require('../services/sheets.service');
+const svc    = require('../services/supabase.service');
 const gmail  = require('../services/gmail.service');
 const { addHours } = require('../utils/dateUtils');
 

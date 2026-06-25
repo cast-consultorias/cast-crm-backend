@@ -1,7 +1,7 @@
 const router  = require('express').Router();
 const auth    = require('../middleware/auth');
 const ceoOnly = require('../middleware/ceo');
-const svc     = require('../services/sheets.service');
+const svc     = require('../services/supabase.service');
 const { calculateIVC, generateOutputEvaluation } = require('../services/ivc.service');
 const { sendBuildingDeliverable } = require('../services/gmail.service');
 const { VELOCITY_MAP, INVOLVEMENT_MAP } = require('../config/constants');

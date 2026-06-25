@@ -1,7 +1,7 @@
 const router  = require('express').Router();
 const multer  = require('multer');
 const auth    = require('../middleware/auth');
-const svc     = require('../services/sheets.service');
+const svc     = require('../services/supabase.service');
 const driveSvc= require('../services/drive.service');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 

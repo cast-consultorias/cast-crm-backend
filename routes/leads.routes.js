@@ -2,17 +2,14 @@ const router  = require('express').Router();
 const multer  = require('multer');
 const auth    = require('../middleware/auth');
 const ceoOnly = require('../middleware/ceo');
-const svc     = require('../services/sheets.service');
+const svc     = require('../services/supabase.service');
 const driveSvc= require('../services/drive.service');
 const pdfSvc  = require('../services/pdf.service');
 const gmailSvc= require('../services/gmail.service');
 const { leadSchema, stageSchema, validate } = require('../utils/validators');
 const { nowISO } = require('../utils/dateUtils');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
-
-// In-memory dedup: prevents double emails when two simultaneous PATCH requests
-// race before Sheets updates the stage. Cleared on server restart (acceptable).
-const bookingEmailSentLeads = new Set();
+const { bookingEmailSentLeads } = require('../utils/emailDedup');
 
 // GET /api/leads/debug/drive-auth — diagnóstico temporal de impersonación
 router.get('/debug/drive-auth', auth, async (req, res) => {
@@ -124,19 +121,26 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
     // Auto-send booking invitation email when moved to stage 04 (only if not already there)
     // bookingEmailSentLeads guards against race conditions where two simultaneous PATCH
     // requests both see lead.stage !== '04' before Sheets commits the first update.
-    if (newStage === '04' && lead.stage !== '04' && lead.email && !bookingEmailSentLeads.has(req.params.id)) {
-      bookingEmailSentLeads.add(req.params.id);
-      const leadToEmail = { ...updated, email: updated.email || lead.email };
-      try {
-        const msgId = await gmailSvc.sendBookingInvitation(leadToEmail);
-        console.log(`[email] Booking invitation sent OK to ${leadToEmail.email} — msgId: ${msgId}`);
+    if (newStage === '04' && lead.stage !== '04') {
+      const emailTarget = updated.email || lead.email;
+      if (!emailTarget) {
+        console.warn(`[email] Booking invitation SKIPPED for lead ${req.params.id} — no email address in Sheets`);
         await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
-          'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
-      } catch (emailErr) {
-        bookingEmailSentLeads.delete(req.params.id); // allow retry if send failed
-        console.error(`[email] Booking invitation FAILED to ${leadToEmail.email}:`, emailErr.message);
-        await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
-          'Error de email', `Email 00: Falló el envío — ${emailErr.message}`, '04').catch(() => {});
+          'Sin email', 'Email 00: No se envió la invitación — el lead no tiene email guardado en Sheets', '04').catch(() => {});
+      } else if (!bookingEmailSentLeads.has(req.params.id)) {
+        bookingEmailSentLeads.add(req.params.id);
+        const leadToEmail = { ...updated, email: emailTarget };
+        try {
+          const msgId = await gmailSvc.sendBookingInvitation(leadToEmail);
+          console.log(`[email] Booking invitation sent OK to ${emailTarget} — msgId: ${msgId}`);
+          await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
+            'Email enviado', 'Email 00: Invitación a agendar Blueprint Session™ — enviado automáticamente', '04');
+        } catch (emailErr) {
+          bookingEmailSentLeads.delete(req.params.id); // allow retry if send failed
+          console.error(`[email] Booking invitation FAILED to ${emailTarget}:`, emailErr.message);
+          await svc.addActivityLog(updated.id, req.user.userId, req.user.name, req.user.role,
+            'Error de email', `Email 00: Falló el envío — ${emailErr.message}`, '04').catch(() => {});
+        }
       }
     }
 
