@@ -251,7 +251,9 @@ router.post('/:id/export-pdf/ivc', auth, async (req, res, next) => {
   try {
     const lead = await svc.getLeadById(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
-    if (!lead.blueprintSession) return res.status(400).json({ error: 'El lead no tiene Blueprint Session completada' });
+    const blueprint = await svc.getBlueprintByLeadId(req.params.id);
+    if (!blueprint) return res.status(400).json({ error: 'El lead no tiene Blueprint Session completada' });
+    lead.blueprintSession = blueprint;
     const pdfBuffer = await pdfSvc.generateIVCPDF(lead);
     const fileName = `Evaluacion_IVC_${lead.name.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');

@@ -15,15 +15,15 @@ const PURPLE= '#AF52DE';
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function ivcColor(score) {
   const n = parseFloat(score);
-  if (n >= 7) return GREEN;
-  if (n >= 3) return ORANGE;
+  if (n >= 1.2) return GREEN;
+  if (n >= 0.5) return ORANGE;
   return RED;
 }
 
 function ivcLabel(score) {
   const n = parseFloat(score);
-  if (n >= 7) return 'ALTA CONVERSIÓN';
-  if (n >= 3) return 'POTENCIAL MEDIO';
+  if (n >= 1.2) return 'ALTA CONVERSIÓN';
+  if (n >= 0.5) return 'POTENCIAL MEDIO';
   return 'RIESGO ALTO';
 }
 
@@ -213,7 +213,7 @@ function generateIVCPDF(lead) {
     // IVC formula components
     const comps = [
       { label: 'RS · Resultado Soñado', value: s.q7 || lead.ivcRS || 0 },
-      { label: 'PP · Prob. Percibida', value: s.q10 ? (s.q10 / 10).toFixed(2) : (lead.ivcPP || 0) },
+      { label: 'PP · Prob. Percibida', value: s.q10 ? ((10 - s.q10) / 10).toFixed(2) : (lead.ivcPP || 0) },
       { label: 'RT · Retraso de Tiempo', value: lead.ivcRT || 0 },
       { label: 'ES · Esfuerzo/Sacrificio', value: lead.ivcES || 0 },
     ];
