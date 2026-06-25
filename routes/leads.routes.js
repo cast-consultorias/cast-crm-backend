@@ -11,8 +11,8 @@ const { nowISO } = require('../utils/dateUtils');
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const { bookingEmailSentLeads } = require('../utils/emailDedup');
 
-// GET /api/leads/debug/drive-auth — diagnóstico temporal de impersonación
-router.get('/debug/drive-auth', auth, async (req, res) => {
+// GET /api/leads/debug/drive-auth — diagnóstico de impersonación (CEO only)
+router.get('/debug/drive-auth', auth, ceoOnly, async (req, res) => {
   const { JWT } = require('google-auth-library');
   const { google } = require('googleapis');
   const email   = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -74,6 +74,9 @@ router.post('/', auth, async (req, res, next) => {
     const { valid, error } = validate(leadSchema, req.body);
     if (!valid) return res.status(400).json({ error });
 
+    // Force stage '01' for non-CEO — prevent stage injection into restricted stages
+    if (!req.user.isCEO) req.body.stage = '01';
+
     const lead = await svc.createLead(req.body, req.user.userId, req.user.name, req.user.role);
 
     // Create Drive folder
@@ -109,7 +112,7 @@ router.patch('/:id/stage', auth, async (req, res, next) => {
 
     // CEO-only stages
     if (['14'].includes(newStage) && !req.user.isCEO) return res.status(403).json({ error: 'Solo el CEO puede marcar como Closed Won' });
-    if (['18'].includes(newStage) && !req.user.isCEO) return res.status(403).json({ error: 'Solo el CEO puede marcar como Closed Lost' });
+    if (['20'].includes(newStage) && !req.user.isCEO) return res.status(403).json({ error: 'Solo el CEO puede marcar como Closed Lost' });
 
     const updated = await svc.updateLeadStage(req.params.id, newStage, req.user.userId, req.user.name, req.user.role, reason);
 

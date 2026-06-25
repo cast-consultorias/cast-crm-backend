@@ -99,7 +99,7 @@ router.post('/n8n/report-ready', async (req, res, next) => {
 
       } else if (level === 'C') {
         // Nurturing
-        await svc.updateLeadStage(leadId, '17', 'n8n', 'Auto-routing', 'Sistema',
+        await svc.updateLeadStage(leadId, '19', 'n8n', 'Auto-routing', 'Sistema',
           'Nivel C — Ingresa a secuencia de Nurturing');
 
       } else {
@@ -109,7 +109,7 @@ router.post('/n8n/report-ready', async (req, res, next) => {
           closedLostCategory: 'No Califica — Score Insuficiente',
           updatedAt: nowISO(),
         }, 'n8n', 'Auto-routing', 'Sistema');
-        await svc.updateLeadStage(leadId, '18', 'n8n', 'Auto-routing', 'Sistema',
+        await svc.updateLeadStage(leadId, '20', 'n8n', 'Auto-routing', 'Sistema',
           'Nivel D — No califica: Closed Lost automático');
         if (lead.driveFolderId) driveSvc.moveLeadFolder(lead.driveFolderId, 'closed-lost').catch(() => {});
       }
@@ -122,6 +122,7 @@ router.post('/n8n/report-ready', async (req, res, next) => {
 // POST /api/webhooks/calcom/booking-created
 router.post('/calcom/booking-created', async (req, res, next) => {
   try {
+    if (!verifySecret(req, res)) return;
     console.log('[calcom-webhook] raw body:', JSON.stringify(req.body, null, 2));
     const payload  = req.body?.payload || req.body;
     const attendee = payload.attendees?.[0] || payload.attendee;
@@ -182,6 +183,7 @@ router.post('/calcom/booking-created', async (req, res, next) => {
 // POST /api/webhooks/calcom/booking-cancelled
 router.post('/calcom/booking-cancelled', async (req, res, next) => {
   try {
+    if (!verifySecret(req, res)) return;
     const payload  = req.body?.payload || req.body;
     const attendee = payload.attendees?.[0] || payload.attendee;
 
