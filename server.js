@@ -74,6 +74,12 @@ async function init() {
     const { startSLAMonitor } = require('./services/sla.service');
     startSLAMonitor();
 
+    // Recovery: detecta leads que quedaron en scoring sheet pero no llegaron a Supabase
+    const { recoverMissingLeads } = require('./services/externalLeads.service');
+    recoverMissingLeads()
+      .then(r => { if (r.recovered > 0) console.log(`✅ Recovery: ${r.recovered} lead(s) recuperado(s)`); })
+      .catch(e => console.warn('⚠️  Recovery check falló (no crítico):', e.message));
+
     const PORT = process.env.PORT || 3001;
     app.listen(PORT, () => {
       console.log(`

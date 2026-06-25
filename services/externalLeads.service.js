@@ -1,5 +1,5 @@
 const { getSheets } = require('../config/google');
-const svc      = require('./sheets.service');
+const svc      = require('./supabase.service');
 const driveSvc = require('./drive.service');
 const { getLevel } = require('./ivc.service');
 
@@ -284,4 +284,104 @@ async function syncExternalLeads() {
   return results;
 }
 
-module.exports = { syncExternalLeads };
+// ─── RECOVERY: detecta leads "En CRM" en scoring sheet que no llegaron a Supabase ──
+// Ocurre cuando el backend estaba caído en el momento del ingreso del lead.
+async function recoverMissingLeads() {
+  if (!SCORING_SHEET_ID) return { recovered: 0, errors: [] };
+
+  const results = { recovered: 0, errors: [] };
+
+  const scoringTab  = await getTabName(SCORING_SHEET_ID, SCORING_GID);
+  if (!scoringTab) return results;
+
+  const scoringRows = await readSheet(SCORING_SHEET_ID, scoringTab, 'A:R');
+
+  // Emails actuales en Supabase
+  const existingLeads  = await svc.getAllLeads();
+  const existingEmails = new Set(existingLeads.map(l => (l.email || '').toLowerCase().trim()));
+
+  // Leer Sheet 2 (formularios) para enriquecer datos si existen
+  let formsLookup = {};
+  if (FORMS_SHEET_ID) {
+    try {
+      const formsTab = await getTabName(FORMS_SHEET_ID, FORMS_GID);
+      if (formsTab) {
+        const formsRows = await readSheet(FORMS_SHEET_ID, formsTab, 'A:AH');
+        for (let i = 1; i < formsRows.length; i++) {
+          const r = formsRows[i];
+          const email = (r[3] || r[1] || '').toLowerCase().trim();
+          if (email && !formsLookup[email]) formsLookup[email] = r;
+        }
+      }
+    } catch (_) {}
+  }
+
+  for (let i = 1; i < scoringRows.length; i++) {
+    const row    = scoringRows[i];
+    if (!row || row.length < 6) continue;
+
+    const estado = (row[12] || '').trim().toLowerCase();
+    const nombre = (row[5] || '').trim();
+    const email  = (row[6] || '').toLowerCase().trim();
+
+    // Solo filas marcadas "en crm" que no existen en Supabase
+    if (estado !== 'en crm') continue;
+    if (!nombre || !email)   continue;
+    if (existingEmails.has(email)) continue;
+
+    try {
+      const score  = parseInt(row[2]) || 50;
+      const grado  = (row[1] || '').trim().toUpperCase().charAt(0);
+      const f      = formsLookup[email] || [];
+
+      const noteParts = [];
+      if (row[9])  noteParts.push(`Perfil: ${row[9]}`);
+      if (row[10]) noteParts.push(`Urgencia: ${row[10]}`);
+      if (row[11]) noteParts.push(`Proyecto: ${row[11]}`);
+      if (f[10])   noteParts.push(`Descripción: ${f[10]}`);
+
+      const levelFinal = ['A','B','C','D'].includes(grado) ? grado : getLevel(score);
+      const newLead = await svc.createLead({
+        name:         nombre,
+        company:      '—',
+        email,
+        phone:        cleanPhone(row[7] || ''),
+        country:      (row[8] || '🇨🇴 Colombia').trim(),
+        sector:       ((f[7] || row[9] || 'Otro').trim()).substring(0, 60),
+        score,
+        level:        levelFinal,
+        stage:        '01',
+        valueUSD:     parseInvestment(f[13] || ''),
+        probability:  grado==='A'?80 : grado==='B'?60 : grado==='C'?30 : 10,
+        painType:     (row[11] || '').substring(0, 200),
+        projectStage: (f[9] || '').trim(),
+        source:       (f[17] || 'Landing CAST').trim(),
+        assignee:     'carlos@castconsultorias.com',
+        notes:        noteParts.join(' | '),
+        entryType:    'automatic',
+        flowType:     ['A','B'].includes(levelFinal) ? 'Flujo 2' : '',
+      }, 'recovery', 'Sistema (recuperación)', 'Sistema');
+
+      // Crear carpeta en Drive
+      try {
+        const { folderId } = await driveSvc.createLeadFolder(newLead);
+        await svc.updateLead(newLead.id, { driveFolderId: folderId }, 'recovery', 'Sistema (recuperación)', 'Sistema');
+      } catch (_) {}
+
+      existingEmails.add(email);
+      results.recovered++;
+      console.log(`[recovery] Lead recuperado: ${nombre} <${email}> — ${newLead.leadCode}`);
+    } catch (err) {
+      results.errors.push({ row: i + 1, name: nombre, email, error: err.message });
+      console.error(`[recovery] Error recuperando ${nombre}:`, err.message);
+    }
+  }
+
+  if (results.recovered > 0) {
+    console.log(`[recovery] ✅ ${results.recovered} lead(s) recuperado(s) del scoring sheet`);
+  }
+
+  return results;
+}
+
+module.exports = { syncExternalLeads, recoverMissingLeads };

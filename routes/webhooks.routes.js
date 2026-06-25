@@ -215,6 +215,17 @@ router.post('/sync-external-leads', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// POST /api/webhooks/recover-missing-leads
+// Recupera leads que quedaron marcados "En CRM" en el scoring sheet pero no llegaron a Supabase
+router.post('/recover-missing-leads', async (req, res, next) => {
+  try {
+    if (!verifySecret(req, res)) return;
+    const { recoverMissingLeads } = require('../services/externalLeads.service');
+    const results = await recoverMissingLeads();
+    res.json({ success: true, ...results });
+  } catch (e) { next(e); }
+});
+
 // GET /api/webhooks/health
 router.get('/health', (req, res) => res.json({ status: 'ok', timestamp: nowISO(), service: 'CAST CRM Webhooks' }));
 
