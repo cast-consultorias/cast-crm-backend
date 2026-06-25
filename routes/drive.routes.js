@@ -19,9 +19,26 @@ router.post('/upload/:leadId', auth, upload.single('file'), async (req, res, nex
     const lead = await svc.getLeadById(req.params.leadId);
     if (!lead?.driveFolderId) return res.status(400).json({ error: 'Lead sin carpeta Drive' });
     if (!req.file) return res.status(400).json({ error: 'Archivo requerido' });
-    const file = await driveSvc.uploadFileToDrive(lead.driveFolderId, req.file.originalname, req.file.mimetype, req.file.buffer);
-    await svc.addAttachment(req.params.leadId, { name:req.file.originalname, type:'document', url:file.webViewLink, driveFileId:file.fileId, stageAt:lead.stage, size:req.file.size }, req.user.userId);
-    res.json({ file });
+
+    // Subir a Drive — si falla, seguimos registrando en Supabase
+    let driveFile = null;
+    try {
+      driveFile = await driveSvc.uploadFileToDrive(lead.driveFolderId, req.file.originalname, req.file.mimetype, req.file.buffer);
+    } catch (e) {
+      console.warn(`[drive-upload] Drive falló para ${req.file.originalname}:`, e.message);
+    }
+
+    const sizeStr = req.file.size > 1024*1024
+      ? `${(req.file.size / (1024*1024)).toFixed(1)} MB`
+      : `${(req.file.size / 1024).toFixed(0)} KB`;
+
+    await svc.addAttachment(req.params.leadId, {
+      name: req.file.originalname, type: 'Documento',
+      url: driveFile?.webViewLink || null, driveFileId: driveFile?.fileId || null,
+      stageAt: lead.stage, size: sizeStr,
+    }, req.user.userId);
+
+    res.json({ success: true, driveFile });
   } catch (e) { next(e); }
 });
 

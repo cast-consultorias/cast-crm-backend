@@ -29,8 +29,14 @@ async function moveLeadFolder(folderId, destination) {
 }
 
 async function uploadFileToDrive(folderId, fileName, mimeType, fileBuffer) {
-  const drive = await getDriveImpersonated();
   const { Readable } = require('stream');
+  // Try impersonated first (uses carlos@ quota), fall back to service account
+  let drive;
+  try {
+    drive = await getDriveImpersonated();
+  } catch {
+    drive = await getDrive();
+  }
   const stream = Readable.from(fileBuffer);
   const res = await drive.files.create({
     requestBody: { name: fileName, parents: [folderId] },

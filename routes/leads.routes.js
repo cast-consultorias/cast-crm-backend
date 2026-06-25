@@ -233,23 +233,31 @@ router.get('/:id/folder', auth, async (req, res, next) => {
 
 // Guarda PDF en Drive + registra en attachments (fire-and-forget, no bloquea la descarga)
 async function savePDFToSoportes(lead, pdfBuffer, fileName, type, userId) {
+  if (!lead.driveFolderId) return;
+  const label = type === 'report' ? 'Reporte IA' : 'Evaluación IVC';
+  const desc  = type === 'report' ? 'Reporte de Análisis Estratégico generado por IA' : 'Output de Evaluación Blueprint Session™';
+  const size  = `${(pdfBuffer.length / 1024).toFixed(0)} KB`;
+
+  // Intentar subir a Drive — si falla, seguimos guardando en Supabase sin URL de Drive
+  let fileId = null, webViewLink = null;
   try {
-    if (!lead.driveFolderId) return;
-    const { fileId, webViewLink } = await driveSvc.uploadFileToDrive(
-      lead.driveFolderId, fileName, 'application/pdf', pdfBuffer
-    );
-    await svc.addAttachment(lead.id, {
-      name:        fileName,
-      type:        type === 'report' ? 'Reporte IA' : 'Evaluación IVC',
-      url:         webViewLink,
-      driveFileId: fileId,
-      stageAt:     lead.stage,
-      description: type === 'report' ? 'Reporte de Análisis Estratégico generado por IA' : 'Output de Evaluación Blueprint Session™',
-      size:        `${(pdfBuffer.length / 1024).toFixed(0)} KB`,
-    }, userId);
-    console.log(`[pdf] Guardado en Drive y Soportes: ${fileName}`);
+    const result = await driveSvc.uploadFileToDrive(lead.driveFolderId, fileName, 'application/pdf', pdfBuffer);
+    fileId = result.fileId;
+    webViewLink = result.webViewLink;
+    console.log(`[pdf] Subido a Drive: ${fileName}`);
   } catch (e) {
-    console.warn(`[pdf] No se pudo guardar en Drive/Soportes (${fileName}):`, e.message);
+    console.warn(`[pdf] Drive upload falló (${fileName}):`, e.message);
+  }
+
+  // Guardar en Supabase siempre (con o sin Drive)
+  try {
+    await svc.addAttachment(lead.id, {
+      name: fileName, type: label, url: webViewLink, driveFileId: fileId,
+      stageAt: lead.stage, description: desc, size,
+    }, userId);
+    console.log(`[pdf] Registrado en Soportes: ${fileName}`);
+  } catch (e) {
+    console.warn(`[pdf] Supabase attachment falló (${fileName}):`, e.message);
   }
 }
 
