@@ -32,13 +32,26 @@ router.post('/upload/:leadId', auth, upload.single('file'), async (req, res, nex
       ? `${(req.file.size / (1024*1024)).toFixed(1)} MB`
       : `${(req.file.size / 1024).toFixed(0)} KB`;
 
+    const attachType = lead.stage === '08' ? 'Propuesta Comercial' : 'Documento';
     await svc.addAttachment(req.params.leadId, {
-      name: req.file.originalname, type: 'Documento',
+      name: req.file.originalname, type: attachType,
       url: driveFile?.webViewLink || null, driveFileId: driveFile?.fileId || null,
       stageAt: lead.stage, size: sizeStr,
     }, req.user.userId);
 
-    res.json({ success: true, driveFile });
+    // Auto-avance: cuando se sube el entregable en stage 08 → mover a stage 09
+    let movedToStage = null;
+    if (lead.stage === '08') {
+      try {
+        await svc.updateLead(req.params.leadId, { stage: '09', slaActive: false }, req.user.userId, req.user.name, req.user.role);
+        movedToStage = '09';
+        console.log(`[drive-upload] Lead ${req.params.leadId} auto-avanzado 08→09 (Entregable Enviado)`);
+      } catch (e) {
+        console.warn(`[drive-upload] Auto-avance 08→09 falló:`, e.message);
+      }
+    }
+
+    res.json({ success: true, driveFile, movedToStage });
   } catch (e) { next(e); }
 });
 
