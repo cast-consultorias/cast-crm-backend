@@ -32,22 +32,30 @@ router.post('/upload/:leadId', auth, upload.single('file'), async (req, res, nex
       ? `${(req.file.size / (1024*1024)).toFixed(1)} MB`
       : `${(req.file.size / 1024).toFixed(0)} KB`;
 
-    const attachType = lead.stage === '08' ? 'Propuesta Comercial' : 'Documento';
+    const STAGE_LABELS = { '08': 'Propuesta Comercial', '13': 'Contrato Firmado', '14': 'Comprobante de Pago' };
+    const STAGE_NEXT   = { '08': '09', '13': '14', '14': '15' };
+    const attachType = STAGE_LABELS[lead.stage] || 'Documento';
+
     await svc.addAttachment(req.params.leadId, {
       name: req.file.originalname, type: attachType,
       url: driveFile?.webViewLink || null, driveFileId: driveFile?.fileId || null,
       stageAt: lead.stage, size: sizeStr,
     }, req.user.userId);
 
-    // Auto-avance: cuando se sube el entregable en stage 08 → mover a stage 09
+    // Auto-avance por carga de documento clave
     let movedToStage = null;
-    if (lead.stage === '08') {
+    const nextStage = STAGE_NEXT[lead.stage];
+    if (nextStage) {
       try {
-        await svc.updateLead(req.params.leadId, { stage: '09', slaActive: false }, req.user.userId, req.user.name, req.user.role);
-        movedToStage = '09';
-        console.log(`[drive-upload] Lead ${req.params.leadId} auto-avanzado 08→09 (Entregable Enviado)`);
+        const updates = { stage: nextStage, slaActive: false };
+        if (nextStage === '09') updates.slaStartTime = new Date().toISOString(); // timer para 09→10 en 48h
+        await svc.updateLead(req.params.leadId, updates, req.user.userId, req.user.name, req.user.role);
+        await svc.addActivityLog(req.params.leadId, req.user.userId, req.user.name, req.user.role,
+          `Auto-avance ${lead.stage}→${nextStage}`, `Documento "${req.file.originalname}" cargado en Soportes`, nextStage);
+        movedToStage = nextStage;
+        console.log(`[drive-upload] Lead ${req.params.leadId} auto-avanzado ${lead.stage}→${nextStage}`);
       } catch (e) {
-        console.warn(`[drive-upload] Auto-avance 08→09 falló:`, e.message);
+        console.warn(`[drive-upload] Auto-avance ${lead.stage}→${nextStage} falló:`, e.message);
       }
     }
 
