@@ -552,6 +552,62 @@ async function addToClosedLost(lead, reason, category, recontact) {
   if (error) throw error;
 }
 
+// ─── CONTRACTS ────────────────────────────────────────────────────
+
+const DEFAULT_PAYMENTS = [
+  { label: 'Primer Pago',     amount: 0, date: null, paid: false },
+  { label: 'Segundo Pago',    amount: 0, date: null, paid: false },
+  { label: 'Tercer Pago',     amount: 0, date: null, paid: false },
+  { label: 'Cuarto Pago',     amount: 0, date: null, paid: false },
+  { label: 'Saldo Pendiente', amount: 0, date: null, paid: false },
+];
+
+function contractFromDb(row) {
+  return {
+    id:             row.id,
+    leadId:         row.lead_id,
+    contractNumber: row.contract_number || '',
+    totalValueCOP:  row.total_value_cop || 0,
+    concept:        row.concept || '',
+    payments:       row.payments || DEFAULT_PAYMENTS,
+    notes:          row.notes || '',
+    createdAt:      row.created_at,
+    updatedAt:      row.updated_at,
+  };
+}
+
+async function getContract(leadId) {
+  const { data, error } = await supabase.from('contracts').select('*').eq('lead_id', leadId).single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data ? contractFromDb(data) : null;
+}
+
+async function upsertContract(leadId, contractData) {
+  const existing = await getContract(leadId);
+  const payload = {
+    contract_number: contractData.contractNumber || '',
+    total_value_cop: parseInt(contractData.totalValueCOP) || 0,
+    concept:         contractData.concept || '',
+    payments:        contractData.payments || DEFAULT_PAYMENTS,
+    notes:           contractData.notes || '',
+    updated_at:      nowISO(),
+  };
+  if (existing) {
+    const { error } = await supabase.from('contracts').update(payload).eq('lead_id', leadId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('contracts').insert({ id: uuidv4(), lead_id: leadId, ...payload });
+    if (error) throw error;
+  }
+  return await getContract(leadId);
+}
+
+async function getAllContracts() {
+  const { data, error } = await supabase.from('contracts').select('*');
+  if (error) throw error;
+  return (data || []).map(contractFromDb);
+}
+
 async function getDeletedLeadEmails() {
   const { data } = await supabase.from('leads').select('email').eq('stage', 'deleted');
   return new Set((data || []).map(l => (l.email || '').toLowerCase().trim()).filter(Boolean));
@@ -566,4 +622,5 @@ module.exports = {
   addAttachment, getAttachmentsByLeadId,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,
+  getContract, upsertContract, getAllContracts,
 };
