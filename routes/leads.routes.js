@@ -282,8 +282,19 @@ router.post('/:id/export-pdf/ivc', auth, async (req, res, next) => {
   try {
     const lead = await svc.getLeadById(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' });
-    const blueprint = await svc.getBlueprintByLeadId(req.params.id);
-    if (!blueprint) return res.status(400).json({ error: 'El lead no tiene Blueprint Session completada' });
+
+    // Intentar cargar la blueprint session; si falla o no existe, usar datos IVC del lead
+    let blueprint = null;
+    try { blueprint = await svc.getBlueprintByLeadId(req.params.id); } catch {}
+
+    if (!blueprint && !lead.ivcScore) {
+      return res.status(400).json({ error: 'El lead no tiene Evaluación IVC completada' });
+    }
+
+    // Fallback: construir sesión mínima desde los datos del lead si no hay blueprint session
+    if (!blueprint) {
+      blueprint = { ivcCalculated: lead.ivcScore, q7: lead.ivcRS, q10: null };
+    }
     lead.blueprintSession = blueprint;
     const pdfBuffer = await pdfSvc.generateIVCPDF(lead);
     const fileName = `Evaluacion_IVC_${lead.name.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.pdf`;
