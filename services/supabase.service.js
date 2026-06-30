@@ -459,6 +459,11 @@ async function addAttachment(leadId, data, userId) {
   if (error) throw error;
 }
 
+async function deleteAttachment(attachmentId, leadId) {
+  const { error } = await supabase.from('attachments').delete().eq('id', attachmentId).eq('lead_id', leadId);
+  if (error) throw error;
+}
+
 async function getAttachmentsByLeadId(leadId) {
   const { data, error } = await supabase
     .from('attachments')
@@ -646,7 +651,7 @@ module.exports = {
   generateLeadCode,
   addActivityLog, getActivityByLeadId,
   getBlueprintByLeadId, createBlueprint, updateBlueprint, approveBlueprint,
-  addAttachment, getAttachmentsByLeadId,
+  addAttachment, getAttachmentsByLeadId, deleteAttachment,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,
   getContract, upsertContract, getAllContracts,

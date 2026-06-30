@@ -224,6 +224,14 @@ router.get('/:id/attachments', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// DELETE /api/leads/:id/attachments/:attachmentId
+router.delete('/:id/attachments/:attachmentId', auth, async (req, res, next) => {
+  try {
+    await svc.deleteAttachment(req.params.attachmentId, req.params.id);
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
 // GET /api/leads/:id/folder
 router.get('/:id/folder', auth, async (req, res, next) => {
   try {
