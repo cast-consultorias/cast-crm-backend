@@ -14,7 +14,21 @@ async function createLeadFolder(lead) {
     requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [ACTIVE] },
     fields: 'id,webViewLink',
   });
-  return { folderId: res.data.id, webViewLink: res.data.webViewLink };
+  const folderId = res.data.id;
+  // Share folder with the workspace user so impersonated uploads work (service accounts have no quota)
+  const WORKSPACE_USER = process.env.GMAIL_SENDER;
+  if (WORKSPACE_USER) {
+    try {
+      await drive.permissions.create({
+        fileId: folderId,
+        requestBody: { role: 'writer', type: 'user', emailAddress: WORKSPACE_USER },
+        sendNotificationEmail: false,
+      });
+    } catch (e) {
+      console.warn('[drive] No se pudo compartir carpeta con', WORKSPACE_USER, ':', e.message);
+    }
+  }
+  return { folderId, webViewLink: res.data.webViewLink };
 }
 
 async function moveLeadFolder(folderId, destination) {
@@ -30,20 +44,8 @@ async function moveLeadFolder(folderId, destination) {
 
 async function uploadFileToDrive(folderId, fileName, mimeType, fileBuffer) {
   const { Readable } = require('stream');
-  // Try impersonated (carlos@ quota) first; if auth or permission fails, fall back to service account
-  try {
-    const drive = await getDriveImpersonated();
-    const res = await drive.files.create({
-      requestBody: { name: fileName, parents: [folderId] },
-      media: { mimeType, body: Readable.from(fileBuffer) },
-      fields: 'id,webViewLink,name',
-    });
-    return { fileId: res.data.id, webViewLink: res.data.webViewLink, name: res.data.name };
-  } catch (e) {
-    console.warn('[drive-upload] Impersonated upload falló, usando service account:', e.message);
-  }
-  // Fallback: service account (folder owner)
-  const drive = await getDrive();
+  // Service accounts have no Drive storage quota — must use impersonation (carlos@)
+  const drive = await getDriveImpersonated();
   const res = await drive.files.create({
     requestBody: { name: fileName, parents: [folderId] },
     media: { mimeType, body: Readable.from(fileBuffer) },

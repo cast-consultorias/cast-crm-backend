@@ -65,6 +65,24 @@ router.post('/upload/:leadId', auth, upload.single('file'), async (req, res, nex
   } catch (e) { next(e); }
 });
 
+// POST /api/drive/share/:leadId — comparte carpeta con GMAIL_SENDER para habilitar uploads
+router.post('/share/:leadId', auth, async (req, res, next) => {
+  try {
+    const lead = await svc.getLeadById(req.params.leadId);
+    if (!lead?.driveFolderId) return res.status(400).json({ error: 'Lead sin carpeta Drive' });
+    const { getDrive } = require('../config/google');
+    const drive = await getDrive();
+    const email = process.env.GMAIL_SENDER;
+    if (!email) return res.status(400).json({ error: 'GMAIL_SENDER no configurado' });
+    await drive.permissions.create({
+      fileId: lead.driveFolderId,
+      requestBody: { role: 'writer', type: 'user', emailAddress: email },
+      sendNotificationEmail: false,
+    });
+    res.json({ success: true, sharedWith: email });
+  } catch (e) { next(e); }
+});
+
 router.post('/move/:leadId', auth, async (req, res, next) => {
   try {
     const { destination } = req.body;
