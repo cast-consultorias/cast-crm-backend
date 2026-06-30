@@ -30,17 +30,23 @@ async function moveLeadFolder(folderId, destination) {
 
 async function uploadFileToDrive(folderId, fileName, mimeType, fileBuffer) {
   const { Readable } = require('stream');
-  // Try impersonated first (uses carlos@ quota), fall back to service account
-  let drive;
+  // Try impersonated (carlos@ quota) first; if auth or permission fails, fall back to service account
   try {
-    drive = await getDriveImpersonated();
-  } catch {
-    drive = await getDrive();
+    const drive = await getDriveImpersonated();
+    const res = await drive.files.create({
+      requestBody: { name: fileName, parents: [folderId] },
+      media: { mimeType, body: Readable.from(fileBuffer) },
+      fields: 'id,webViewLink,name',
+    });
+    return { fileId: res.data.id, webViewLink: res.data.webViewLink, name: res.data.name };
+  } catch (e) {
+    console.warn('[drive-upload] Impersonated upload falló, usando service account:', e.message);
   }
-  const stream = Readable.from(fileBuffer);
+  // Fallback: service account (folder owner)
+  const drive = await getDrive();
   const res = await drive.files.create({
     requestBody: { name: fileName, parents: [folderId] },
-    media: { mimeType, body: stream },
+    media: { mimeType, body: Readable.from(fileBuffer) },
     fields: 'id,webViewLink,name',
   });
   return { fileId: res.data.id, webViewLink: res.data.webViewLink, name: res.data.name };
