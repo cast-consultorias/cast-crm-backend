@@ -615,6 +615,31 @@ async function getDeletedLeadEmails() {
   return new Set((data || []).map(l => (l.email || '').toLowerCase().trim()).filter(Boolean));
 }
 
+// ─── PROJECT BOARDS ───────────────────────────────────────────────
+
+async function getBoard(leadId) {
+  const { data, error } = await supabase
+    .from('project_boards')
+    .select('board_data')
+    .eq('lead_id', parseInt(leadId))
+    .single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data?.board_data || null;
+}
+
+async function upsertBoard(leadId, boardData) {
+  const { data, error } = await supabase
+    .from('project_boards')
+    .upsert(
+      { lead_id: parseInt(leadId), board_data: boardData, updated_at: new Date().toISOString() },
+      { onConflict: 'lead_id' }
+    )
+    .select('board_data')
+    .single();
+  if (error) throw error;
+  return data?.board_data;
+}
+
 module.exports = {
   getAllLeads, getLeadById, createLead, updateLead, updateLeadStage, deleteLead,
   getDeletedLeadEmails,
@@ -625,4 +650,5 @@ module.exports = {
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,
   getContract, upsertContract, getAllContracts,
+  getBoard, upsertBoard,
 };

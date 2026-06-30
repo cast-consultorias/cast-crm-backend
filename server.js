@@ -51,6 +51,7 @@ app.use('/api/dashboard', require('./routes/dashboard.routes'));
 app.use('/api/webhooks',  require('./routes/webhooks.routes'));
 app.use('/api/users',     require('./routes/users.routes'));
 app.use('/api/contracts', require('./routes/contracts.routes'));
+app.use('/api/boards',   require('./routes/boards.routes'));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', version: '3.1.0', timestamp: new Date().toISOString(), service: 'CAST CRM Revenue Engine' }));
 
