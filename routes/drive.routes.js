@@ -22,9 +22,11 @@ router.post('/upload/:leadId', auth, upload.single('file'), async (req, res, nex
 
     // Subir a Drive — si falla, seguimos registrando en Supabase
     let driveFile = null;
+    let driveError = null;
     try {
       driveFile = await driveSvc.uploadFileToDrive(lead.driveFolderId, req.file.originalname, req.file.mimetype, req.file.buffer);
     } catch (e) {
+      driveError = e.message;
       console.warn(`[drive-upload] Drive falló para ${req.file.originalname}:`, e.message);
     }
 
@@ -59,7 +61,7 @@ router.post('/upload/:leadId', auth, upload.single('file'), async (req, res, nex
       }
     }
 
-    res.json({ success: true, driveFile, movedToStage });
+    res.json({ success: true, driveFile, movedToStage, driveError });
   } catch (e) { next(e); }
 });
 
