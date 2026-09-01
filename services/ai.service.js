@@ -83,4 +83,72 @@ Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown
   }
 }
 
-module.exports = { generateLeadReport, structureBlueprintAnswer };
+// Fase 8 — CAST Scoring Engine: Claude ESTIMA las variables de entrada de los 5
+// scores a partir del hallazgo + evidencia; el FDE siempre revisa/ajusta antes de
+// calcular (mismo principio de Fase 7: "AI puede sugerir. El FDE confirma.").
+const {
+  COS_WEIGHTS, COS_VARIABLE_LABELS,
+  AUTOMATION_POTENTIAL_VARIABLES, AUTOMATION_POTENTIAL_LABELS,
+  AI_OPPORTUNITY_DIMENSIONS, AI_OPPORTUNITY_LABELS,
+  CAST_VOICE_VARIABLES, CAST_VOICE_LABELS,
+  PM_OPPORTUNITY_CRITERIA, PM_OPPORTUNITY_LABELS,
+} = require('../config/blueprintScoring.config');
+
+async function estimateBlueprintFindingScores(finding, evidenceText) {
+  const cosVars = Object.keys(COS_WEIGHTS).map(k => `  - ${k}: ${COS_VARIABLE_LABELS[k]}`).join('\n');
+  const apVars = AUTOMATION_POTENTIAL_VARIABLES.map(k => `  - ${k}: ${AUTOMATION_POTENTIAL_LABELS[k]}`).join('\n');
+  const aiDims = AI_OPPORTUNITY_DIMENSIONS.map(k => `  - ${k}: ${AI_OPPORTUNITY_LABELS[k]}`).join('\n');
+  const voiceVars = CAST_VOICE_VARIABLES.map(k => `  - ${k}: ${CAST_VOICE_LABELS[k]}`).join('\n');
+  const pmCriteria = PM_OPPORTUNITY_CRITERIA.map(k => `  - ${k}: ${PM_OPPORTUNITY_LABELS[k]}`).join('\n');
+
+  const prompt = `Eres el motor de scoring de CAST Consultorías para Blueprints FDE+PMP. Un Forward Deployed Engineer (FDE) identificó este hallazgo (oportunidad) durante una sesión de discovery operacional con un cliente:
+
+CATEGORÍA: ${finding.category}
+TÍTULO: ${finding.title}
+DESCRIPCIÓN: ${finding.description || '(sin descripción adicional)'}
+${evidenceText ? `\nEVIDENCIA (respuestas del cliente relacionadas):\n${evidenceText}` : ''}
+
+Tu tarea: estimar, basándote SOLO en la información dada (sin inventar hechos que no estén presentes), las variables de entrada para 5 scores independientes. Cada variable de escala 0-5 se califica así: 0=nula/no aplica, 1=muy baja, 2=baja, 3=media, 4=alta, 5=muy alta/crítica. Si no hay evidencia suficiente para estimar una variable con confianza, usa tu mejor estimación conservadora (nunca dejes un campo vacío) y menciónalo en "notes".
+
+Variables de COS (CAST Opportunity Score), escala 0-5 cada una:
+${cosVars}
+
+Variables de Automation Potential, escala 0-5 cada una:
+${apVars}
+
+Dimensiones de AI Opportunity — responde true/false si esa dimensión aplica a este hallazgo:
+${aiDims}
+
+Variables de CAST Voice Index, escala 0-5 cada una:
+${voiceVars}
+
+Criterios de PM Opportunity — responde true/false si ese criterio aplica a este hallazgo:
+${pmCriteria}
+
+Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown, con este formato exacto (usa los nombres de variable EXACTOS de arriba como llaves):
+{"cos": {...8 llaves 0-5...}, "automationPotential": {...6 llaves 0-5...}, "aiOpportunity": {...7 llaves true/false...}, "castVoiceIndex": {...8 llaves 0-5...}, "pmOpportunity": {...9 llaves true/false...}, "notes": "..."}`;
+
+  const message = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1200,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = message.content[0].text.trim();
+  try {
+    return JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
+  } catch {
+    const zeros = keys => Object.fromEntries(keys.map(k => [k, 0]));
+    const falses = keys => Object.fromEntries(keys.map(k => [k, false]));
+    return {
+      cos: zeros(Object.keys(COS_WEIGHTS)),
+      automationPotential: zeros(AUTOMATION_POTENTIAL_VARIABLES),
+      aiOpportunity: falses(AI_OPPORTUNITY_DIMENSIONS),
+      castVoiceIndex: zeros(CAST_VOICE_VARIABLES),
+      pmOpportunity: falses(PM_OPPORTUNITY_CRITERIA),
+      notes: 'No se pudo estimar automáticamente — revisa y califica manualmente.',
+    };
+  }
+}
+
+module.exports = { generateLeadReport, structureBlueprintAnswer, estimateBlueprintFindingScores };

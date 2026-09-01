@@ -3,7 +3,8 @@
 const router  = require('express').Router();
 const auth    = require('../middleware/auth');
 const svc     = require('../services/supabase.service');
-const { structureBlueprintAnswer } = require('../services/ai.service');
+const { structureBlueprintAnswer, estimateBlueprintFindingScores } = require('../services/ai.service');
+const scoring = require('../services/blueprintScoring.service');
 
 // POST /api/blueprints-fde/:leadId — crear sesión
 router.post('/:leadId', auth, async (req, res, next) => {
@@ -146,6 +147,63 @@ router.post('/:sessionId/ai/suggestions/:suggestionId/resolve', auth, async (req
     if (!['ACCEPTED', 'REJECTED'].includes(status)) return res.status(400).json({ error: "status debe ser ACCEPTED o REJECTED" });
     const suggestion = await svc.resolveBpFdeAiSuggestion(req.params.suggestionId, status, req.user.userId, req.user.role);
     res.json({ suggestion });
+  } catch (e) { next(e); }
+});
+
+// ─── Fase 8 — Hallazgos y Scoring ─────────────────────────────────────────────
+
+// POST /api/blueprints-fde/:sessionId/findings — crear un hallazgo
+router.post('/:sessionId/findings', auth, async (req, res, next) => {
+  try {
+    const { category, title, description, processRef, evidenceAnswerIds } = req.body;
+    if (!category || !title?.trim()) return res.status(400).json({ error: 'category y title son requeridos' });
+    const finding = await svc.createBpFdeFinding(req.params.sessionId, { category, title, description, processRef, evidenceAnswerIds }, req.user.userId, req.user.role);
+    res.status(201).json({ finding });
+  } catch (e) { next(e); }
+});
+
+// GET /api/blueprints-fde/:sessionId/findings — listar hallazgos (con su score si existe)
+router.get('/:sessionId/findings', auth, async (req, res, next) => {
+  try {
+    const findings = await svc.getBpFdeFindings(req.params.sessionId);
+    res.json({ findings });
+  } catch (e) { next(e); }
+});
+
+// POST /api/blueprints-fde/:sessionId/findings/:findingId/ai-estimate — Claude estima
+// las variables de entrada de los 5 scores. Nunca guarda scores — solo devuelve la
+// estimación para que el FDE la revise/ajuste (§10.1, mismo principio de Fase 7).
+router.post('/:sessionId/findings/:findingId/ai-estimate', auth, async (req, res, next) => {
+  try {
+    const finding = await svc.getBpFdeFindingById(req.params.findingId);
+    if (!finding) return res.status(404).json({ error: 'Hallazgo no encontrado' });
+
+    let evidenceText = '';
+    if (finding.evidenceAnswerIds?.length) {
+      const answers = await svc.getBpFdeAnswers(req.params.sessionId);
+      evidenceText = answers.filter(a => finding.evidenceAnswerIds.includes(a.id))
+        .map(a => `- ${a.questionCode}: ${a.answerText}`).join('\n');
+    }
+
+    const estimate = await estimateBlueprintFindingScores(finding, evidenceText);
+    const suggestion = await svc.addBpFdeAiSuggestion(req.params.sessionId, 'scoring', { findingId: finding.id, ...estimate });
+    res.status(201).json({ suggestion });
+  } catch (e) { next(e); }
+});
+
+// POST /api/blueprints-fde/:sessionId/findings/:findingId/scores — el FDE confirma
+// (con o sin ajustes) los valores y aquí SÍ se calculan y guardan los 5 scores.
+router.post('/:sessionId/findings/:findingId/scores', auth, async (req, res, next) => {
+  try {
+    const { cos, automationPotential, aiOpportunity, castVoiceIndex, pmOpportunity, suggestionId } = req.body;
+    const computed = scoring.calcAllScores({ cos, automationPotential, aiOpportunity, castVoiceIndex, pmOpportunity });
+    const score = await svc.upsertBpFdeScore(
+      req.params.sessionId, req.params.findingId, computed,
+      { cos, automationPotential, aiOpportunity, castVoiceIndex, pmOpportunity },
+      req.user.userId, req.user.role
+    );
+    if (suggestionId) await svc.resolveBpFdeAiSuggestion(suggestionId, 'ACCEPTED', req.user.userId, req.user.role).catch(() => {});
+    res.json({ score, levels: { cos: computed.cos.level, automationPotential: computed.automationPotential.level, aiOpportunity: computed.aiOpportunity.level, castVoiceIndex: computed.castVoiceIndex.level } });
   } catch (e) { next(e); }
 });
 

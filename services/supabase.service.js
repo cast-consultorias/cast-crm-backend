@@ -728,6 +728,88 @@ async function resolveBpFdeAiSuggestion(suggestionId, status, userId, userRole) 
   return suggestion;
 }
 
+// ─── BLUEPRINTS FDE+PMP — Hallazgos y Scoring (Fase 8) ───────────────────────
+// §27 de la fuente: los 5 scores son independientes, ninguno deriva de otro.
+// Un hallazgo (finding) es una oportunidad identificada por el FDE a partir de
+// las respuestas — no es 1:1 con una pregunta. Los scores cuelgan del hallazgo.
+
+function dbToBpFdeFinding(row) {
+  if (!row) return null;
+  return {
+    id: row.id, sessionId: row.session_id, processRef: row.process_ref,
+    category: row.category, title: row.title, description: row.description,
+    evidenceAnswerIds: row.evidence_answer_ids || [],
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+async function createBpFdeFinding(sessionId, { category, title, description, processRef, evidenceAnswerIds }, userId, userRole) {
+  const { data, error } = await supabase
+    .from('blueprint_findings')
+    .insert({
+      session_id: sessionId, category, title, description: description || null,
+      process_ref: processRef || null, evidence_answer_ids: evidenceAnswerIds || [],
+    })
+    .select().single();
+  if (error) throw error;
+  const finding = dbToBpFdeFinding(data);
+  await addBpFdeAuditLog(sessionId, userId, userRole, 'finding_created', null, { findingId: finding.id, category, title });
+  return finding;
+}
+
+async function getBpFdeFindings(sessionId) {
+  const [{ data: findings, error: fErr }, { data: scores, error: sErr }] = await Promise.all([
+    supabase.from('blueprint_findings').select('*').eq('session_id', sessionId).order('created_at', { ascending: false }),
+    supabase.from('blueprint_scores').select('*').eq('session_id', sessionId),
+  ]);
+  if (fErr) throw fErr;
+  if (sErr) throw sErr;
+  const scoreByFinding = Object.fromEntries((scores || []).map(s => [s.finding_id, dbToBpFdeScore(s)]));
+  return (findings || []).map(f => ({ ...dbToBpFdeFinding(f), score: scoreByFinding[f.id] || null }));
+}
+
+async function getBpFdeFindingById(findingId) {
+  const { data, error } = await supabase.from('blueprint_findings').select('*').eq('id', findingId).single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return dbToBpFdeFinding(data);
+}
+
+function dbToBpFdeScore(row) {
+  if (!row) return null;
+  return {
+    id: row.id, sessionId: row.session_id, findingId: row.finding_id,
+    cos: row.cos, automationPotential: row.automation_potential, aiOpportunity: row.ai_opportunity,
+    castVoiceIndex: row.cast_voice_index, pmOpportunity: row.pm_opportunity,
+    pmOpportunityCriteria: row.pm_opportunity_criteria, pmComplexity: row.pm_complexity,
+    variables: row.variables, calculatedAt: row.calculated_at,
+  };
+}
+
+async function upsertBpFdeScore(sessionId, findingId, computed, rawVariables, userId, userRole) {
+  const { data, error } = await supabase
+    .from('blueprint_scores')
+    .upsert({
+      session_id: sessionId, finding_id: findingId,
+      cos: computed.cos.score,
+      automation_potential: computed.automationPotential.score,
+      ai_opportunity: computed.aiOpportunity.score,
+      cast_voice_index: computed.castVoiceIndex.score,
+      pm_opportunity: computed.pmOpportunity.opportunity,
+      pm_opportunity_criteria: computed.pmOpportunity.matchedCriteria,
+      variables: rawVariables,
+      calculated_at: nowISO(),
+    }, { onConflict: 'finding_id' })
+    .select().single();
+  if (error) throw error;
+  const score = dbToBpFdeScore(data);
+  await addBpFdeAuditLog(sessionId, userId, userRole, 'scores_calculated', null, {
+    findingId, cos: score.cos, cosLevel: computed.cos.level,
+    automationPotential: score.automationPotential, aiOpportunity: score.aiOpportunity,
+    castVoiceIndex: score.castVoiceIndex, pmOpportunity: score.pmOpportunity,
+  });
+  return score;
+}
+
 // ─── ATTACHMENTS ──────────────────────────────────────────────────
 
 async function addAttachment(leadId, data, userId) {
@@ -944,6 +1026,7 @@ module.exports = {
   getBpFdeQuestionBank, getBpFdeAnswers, upsertBpFdeAnswer,
   getBpFdeVoiceConsent, setBpFdeVoiceConsent, addBpFdeTranscript, getBpFdeTranscripts,
   addBpFdeAiSuggestion, resolveBpFdeAiSuggestion,
+  createBpFdeFinding, getBpFdeFindings, getBpFdeFindingById, upsertBpFdeScore,
   addAttachment, getAttachmentsByLeadId, deleteAttachment,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,
