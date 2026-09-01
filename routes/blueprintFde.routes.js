@@ -23,6 +23,16 @@ router.get('/lead/:leadId', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// GET /api/blueprints-fde/questions — banco de preguntas (§07). Debe ir ANTES de
+// GET /:sessionId — mismo número de segmentos, si no Express confunde "questions" con un id.
+router.get('/questions', auth, async (req, res, next) => {
+  try {
+    const version = parseInt(req.query.version) || 1;
+    const bank = await svc.getBpFdeQuestionBank(version);
+    res.json(bank);
+  } catch (e) { next(e); }
+});
+
 // GET /api/blueprints-fde/:sessionId — obtener una sesión
 router.get('/:sessionId', auth, async (req, res, next) => {
   try {
@@ -51,6 +61,26 @@ router.post('/:sessionId/status', auth, async (req, res, next) => {
     if (e.statusCode) return res.status(e.statusCode).json({ error: e.message });
     next(e);
   }
+});
+
+// GET /api/blueprints-fde/:sessionId/answers — respuestas de una sesión
+router.get('/:sessionId/answers', auth, async (req, res, next) => {
+  try {
+    const answers = await svc.getBpFdeAnswers(req.params.sessionId);
+    res.json({ answers });
+  } catch (e) { next(e); }
+});
+
+// PUT /api/blueprints-fde/:sessionId/answers/:questionCode — guardar/editar una respuesta (✎ Escribir)
+router.put('/:sessionId/answers/:questionCode', auth, async (req, res, next) => {
+  try {
+    const { answerText, questionSetVersion } = req.body;
+    const answer = await svc.upsertBpFdeAnswer(
+      req.params.sessionId, req.params.questionCode, questionSetVersion || 1,
+      answerText, req.user.userId, req.user.role
+    );
+    res.json({ answer });
+  } catch (e) { next(e); }
 });
 
 module.exports = router;

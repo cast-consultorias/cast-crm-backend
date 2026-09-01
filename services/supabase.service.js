@@ -567,6 +567,86 @@ async function transitionBpFdeSessionStatus(id, newStatus, userId, userRole) {
   return after;
 }
 
+// ─── BLUEPRINTS FDE+PMP — Question Engine (Fase 4) ───────────────────────────
+// Banco de preguntas versionado (§06/§07) + respuestas. Fase 4 solo carga y
+// permite navegar/responder el banco base — la activación condicional de
+// subpreguntas (G04.1..J01.4) es Fase 5, aunque ya vienen sembradas como datos.
+
+function dbToBpFdeQuestion(row) {
+  return {
+    code:               row.code,
+    block:              row.block,
+    blockName:          row.block_name,
+    prompt:             row.prompt,
+    questionType:       row.question_type,
+    parentCode:         row.parent_code,
+    orderIndex:         row.order_index,
+    allowUnknown:       row.allow_unknown,
+    questionSetVersion: row.question_set_version,
+  };
+}
+
+async function getBpFdeQuestionBank(version = 1) {
+  const [{ data: questions, error: qErr }, { data: rules, error: rErr }] = await Promise.all([
+    supabase.from('blueprint_questions').select('*').eq('question_set_version', version).order('block').order('order_index'),
+    supabase.from('blueprint_question_rules').select('*').eq('question_set_version', version),
+  ]);
+  if (qErr) throw qErr;
+  if (rErr) throw rErr;
+  return {
+    questions: (questions || []).map(dbToBpFdeQuestion),
+    rules: (rules || []).map(r => ({ triggerQuestionCode: r.trigger_question_code, triggerValue: r.trigger_value, activatesQuestionCode: r.activates_question_code })),
+  };
+}
+
+function dbToBpFdeAnswer(row) {
+  return {
+    id:                 row.id,
+    sessionId:          row.session_id,
+    questionCode:       row.question_code,
+    questionSetVersion: row.question_set_version,
+    answerText:         row.answer_text,
+    answerValue:        row.answer_value,
+    confidence:         row.confidence,
+    status:             row.status,
+    capturedVia:        row.captured_via,
+    confirmedBy:        row.confirmed_by,
+    confirmedAt:        row.confirmed_at,
+    createdAt:          row.created_at,
+    updatedAt:          row.updated_at,
+  };
+}
+
+async function getBpFdeAnswers(sessionId) {
+  const { data, error } = await supabase.from('blueprint_answers').select('*').eq('session_id', sessionId);
+  if (error) throw error;
+  return (data || []).map(dbToBpFdeAnswer);
+}
+
+// Fase 4: el FDE escribe la respuesta directamente (✎ Escribir) — sin pipeline de
+// voz/IA todavía (Fases 6-7), así que la respuesta queda PM_CONFIRMED de una vez.
+async function upsertBpFdeAnswer(sessionId, questionCode, questionSetVersion, answerText, userId, userRole) {
+  const { data, error } = await supabase
+    .from('blueprint_answers')
+    .upsert({
+      session_id: sessionId,
+      question_code: questionCode,
+      question_set_version: questionSetVersion,
+      answer_text: answerText,
+      status: 'PM_CONFIRMED',
+      captured_via: 'text',
+      confirmed_by: userId,
+      confirmed_at: nowISO(),
+      updated_at: nowISO(),
+    }, { onConflict: 'session_id,question_code' })
+    .select()
+    .single();
+  if (error) throw error;
+  const answer = dbToBpFdeAnswer(data);
+  await addBpFdeAuditLog(sessionId, userId, userRole, 'answer_saved', null, { questionCode, answerText });
+  return answer;
+}
+
 // ─── ATTACHMENTS ──────────────────────────────────────────────────
 
 async function addAttachment(leadId, data, userId) {
@@ -780,6 +860,7 @@ module.exports = {
   getBlueprintByLeadId, createBlueprint, updateBlueprint, approveBlueprint,
   createBpFdeSession, getBpFdeSessionById, getBpFdeSessionsByLead,
   updateBpFdeSession, transitionBpFdeSessionStatus, addBpFdeAuditLog,
+  getBpFdeQuestionBank, getBpFdeAnswers, upsertBpFdeAnswer,
   addAttachment, getAttachmentsByLeadId, deleteAttachment,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,
