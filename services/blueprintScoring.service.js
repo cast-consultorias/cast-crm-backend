@@ -46,6 +46,20 @@ function calcPmOpportunity(criteria = {}) {
   return { opportunity: matched.length > 0, matchedCriteria: matched };
 }
 
+// Fase 9 — Data Opportunity (Bloque H) = promedio simple 0-5 (asunción propuesta)
+function calcDataOpportunity(vars = {}) {
+  const values = cfg.DATA_OPPORTUNITY_VARIABLES.map(k => clamp05(vars[k]));
+  const score = parseFloat((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2));
+  return { score, level: levelFor(score, cfg.DATA_OPPORTUNITY_LEVELS) };
+}
+
+// Fase 9 — Technology Opportunity (Bloque G) = promedio simple 0-5 (asunción propuesta)
+function calcTechnologyOpportunity(vars = {}) {
+  const values = cfg.TECHNOLOGY_OPPORTUNITY_VARIABLES.map(k => clamp05(vars[k]));
+  const score = parseFloat((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2));
+  return { score, level: levelFor(score, cfg.TECHNOLOGY_OPPORTUNITY_LEVELS) };
+}
+
 // Corre los 5 scores independientes de una sola vez (§27: independientes entre sí,
 // ninguno deriva de otro — por eso se calculan por separado, no en cascada)
 function calcAllScores({ cos = {}, automationPotential = {}, aiOpportunity = {}, castVoiceIndex = {}, pmOpportunity = {} }) {
@@ -58,4 +72,16 @@ function calcAllScores({ cos = {}, automationPotential = {}, aiOpportunity = {},
   };
 }
 
-module.exports = { calcCOS, calcAutomationPotential, calcAiOpportunity, calcCastVoiceIndex, calcPmOpportunity, calcAllScores, levelFor };
+// Fase 9 — calcula Data/Technology Opportunity + Priority a partir de scores ya
+// existentes (blueprint_scores del hallazgo) — nunca recalcula COS/AP/AI/Voice/PM.
+function calcOpportunityExtras({ dataOpportunity = {}, technologyOpportunity = {}, cosLevel, pmOpportunity }) {
+  const data = calcDataOpportunity(dataOpportunity);
+  const technology = calcTechnologyOpportunity(technologyOpportunity);
+  const priority = cfg.derivePriority(cosLevel, !!pmOpportunity);
+  return { dataOpportunity: data, technologyOpportunity: technology, priority };
+}
+
+module.exports = {
+  calcCOS, calcAutomationPotential, calcAiOpportunity, calcCastVoiceIndex, calcPmOpportunity, calcAllScores,
+  calcDataOpportunity, calcTechnologyOpportunity, calcOpportunityExtras, levelFor,
+};

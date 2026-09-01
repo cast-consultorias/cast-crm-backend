@@ -85,10 +85,53 @@ const PM_OPPORTUNITY_LABELS = {
 // PM_COMPLEXITY (C1-C5) remite a la Complexity Matrix (§32) — no construida todavía.
 // No se recalcula aparte aquí; queda NULL hasta que esa fase exista.
 
+// ─── 6. Data Opportunity (Fase 9) — Bloque H. Sin fórmula en ninguna fuente —
+// ASUNCIÓN PROPUESTA confirmada con el CEO 2026-09-01: promedio simple 0-5 de
+// señales de dolor en el manejo de datos (mismo patrón que Automation Potential).
+const DATA_OPPORTUNITY_VARIABLES = ['fragmentacion', 'desactualizacion', 'duplicidad', 'faltaTrazabilidad', 'decisionSinDatos', 'faltaVisibilidad'];
+const DATA_OPPORTUNITY_LABELS = {
+  fragmentacion: 'Datos no centralizados', desactualizacion: 'Datos desactualizados', duplicidad: 'Duplicados',
+  faltaTrazabilidad: 'Sin consulta histórica', decisionSinDatos: 'Decide por experiencia, no por datos',
+  faltaVisibilidad: 'Sin dashboards',
+};
+const DATA_OPPORTUNITY_LEVELS = [
+  { max: 1.9, label: 'LOW',        es: 'Bajo' },
+  { max: 2.9, label: 'EXPLORATORY', es: 'Exploratorio' },
+  { max: 3.9, label: 'OPPORTUNITY', es: 'Oportunidad' },
+  { max: 5,   label: 'HIGH',       es: 'Alto' },
+];
+
+// ─── 7. Technology Opportunity (Fase 9) — Bloque G. Sin fórmula en ninguna fuente —
+// ASUNCIÓN PROPUESTA confirmada con el CEO 2026-09-01: promedio simple 0-5.
+const TECHNOLOGY_OPPORTUNITY_VARIABLES = ['desconexionSistemas', 'transferenciaManual', 'dependenciaExcel', 'softwareObsoleto', 'brechaTecnologica'];
+const TECHNOLOGY_OPPORTUNITY_LABELS = {
+  desconexionSistemas: 'Sistemas no conectados', transferenciaManual: 'Transferencia manual entre sistemas',
+  dependenciaExcel: 'Dependencia de Excel/Sheets', softwareObsoleto: 'Software obsoleto', brechaTecnologica: 'Tecnología que falta',
+};
+const TECHNOLOGY_OPPORTUNITY_LEVELS = [
+  { max: 1.9, label: 'LOW',        es: 'Bajo' },
+  { max: 2.9, label: 'EXPLORATORY', es: 'Exploratorio' },
+  { max: 3.9, label: 'OPPORTUNITY', es: 'Oportunidad' },
+  { max: 5,   label: 'HIGH',       es: 'Alto' },
+];
+
+// ─── 8. Priority del Opportunity Register (Fase 9) — sin fórmula en ninguna
+// fuente. ASUNCIÓN PROPUESTA confirmada con el CEO 2026-09-01: deriva de COS +
+// PM Opportunity (no crea un sexto score — solo prioriza lo ya calculado, §27).
+function derivePriority(cosLevel, pmOpportunity) {
+  if (cosLevel === 'CRITICAL') return 'P1';
+  if (cosLevel === 'HIGH') return 'P2';
+  if (pmOpportunity) return 'P2';
+  return 'P3';
+}
+
 module.exports = {
   COS_WEIGHTS, COS_VARIABLE_LABELS, COS_LEVELS,
   AUTOMATION_POTENTIAL_VARIABLES, AUTOMATION_POTENTIAL_LABELS, AUTOMATION_POTENTIAL_LEVELS,
   AI_OPPORTUNITY_DIMENSIONS, AI_OPPORTUNITY_LABELS, AI_OPPORTUNITY_LEVELS,
+  DATA_OPPORTUNITY_VARIABLES, DATA_OPPORTUNITY_LABELS, DATA_OPPORTUNITY_LEVELS,
+  TECHNOLOGY_OPPORTUNITY_VARIABLES, TECHNOLOGY_OPPORTUNITY_LABELS, TECHNOLOGY_OPPORTUNITY_LEVELS,
+  derivePriority,
   CAST_VOICE_VARIABLES, CAST_VOICE_LABELS, CAST_VOICE_LEVELS,
   PM_OPPORTUNITY_CRITERIA, PM_OPPORTUNITY_LABELS,
 };

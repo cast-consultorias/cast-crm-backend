@@ -3,8 +3,9 @@
 const router  = require('express').Router();
 const auth    = require('../middleware/auth');
 const svc     = require('../services/supabase.service');
-const { structureBlueprintAnswer, estimateBlueprintFindingScores } = require('../services/ai.service');
+const { structureBlueprintAnswer, estimateBlueprintFindingScores, draftOpportunityRegisterEntry } = require('../services/ai.service');
 const scoring = require('../services/blueprintScoring.service');
+const scoringCfg = require('../config/blueprintScoring.config');
 
 // POST /api/blueprints-fde/:leadId — crear sesión
 router.post('/:leadId', auth, async (req, res, next) => {
@@ -204,6 +205,75 @@ router.post('/:sessionId/findings/:findingId/scores', auth, async (req, res, nex
     );
     if (suggestionId) await svc.resolveBpFdeAiSuggestion(suggestionId, 'ACCEPTED', req.user.userId, req.user.role).catch(() => {});
     res.json({ score, levels: { cos: computed.cos.level, automationPotential: computed.automationPotential.level, aiOpportunity: computed.aiOpportunity.level, castVoiceIndex: computed.castVoiceIndex.level } });
+  } catch (e) { next(e); }
+});
+
+// ─── Fase 9 — Opportunity Engine / Opportunity Register ──────────────────────
+
+// POST /api/blueprints-fde/:sessionId/findings/:findingId/opportunity/draft —
+// Claude redacta el borrador (Problem/Process/Impact/Root Cause/Risk +
+// Data/Technology Opportunity). Nunca crea el registro — solo la propuesta.
+router.post('/:sessionId/findings/:findingId/opportunity/draft', auth, async (req, res, next) => {
+  try {
+    const findings = await svc.getBpFdeFindings(req.params.sessionId);
+    const finding = findings.find(f => f.id === req.params.findingId);
+    if (!finding) return res.status(404).json({ error: 'Hallazgo no encontrado' });
+    if (!finding.score) return res.status(400).json({ error: 'Este hallazgo todavía no tiene scores calculados (Fase 8) — calcúlalos primero' });
+
+    let evidenceText = '';
+    if (finding.evidenceAnswerIds?.length) {
+      const answers = await svc.getBpFdeAnswers(req.params.sessionId);
+      evidenceText = answers.filter(a => finding.evidenceAnswerIds.includes(a.id))
+        .map(a => `- ${a.questionCode}: ${a.answerText}`).join('\n');
+    }
+
+    const cosLevel = scoring.levelFor(finding.score.cos, scoringCfg.COS_LEVELS);
+    const draft = await draftOpportunityRegisterEntry(finding, { ...finding.score, cosLevel }, evidenceText);
+    const suggestion = await svc.addBpFdeAiSuggestion(req.params.sessionId, 'opportunity', { findingId: finding.id, ...draft });
+    res.status(201).json({ suggestion });
+  } catch (e) { next(e); }
+});
+
+// POST /api/blueprints-fde/:sessionId/findings/:findingId/opportunity — el FDE
+// confirma (con o sin ajustes) y aquí SÍ se crea el registro en el Opportunity Register.
+router.post('/:sessionId/findings/:findingId/opportunity', auth, async (req, res, next) => {
+  try {
+    const findings = await svc.getBpFdeFindings(req.params.sessionId);
+    const finding = findings.find(f => f.id === req.params.findingId);
+    if (!finding) return res.status(404).json({ error: 'Hallazgo no encontrado' });
+    if (!finding.score) return res.status(400).json({ error: 'Este hallazgo todavía no tiene scores calculados (Fase 8)' });
+
+    const { problem, process, impact, rootCause, risk, dataOpportunity, technologyOpportunity, confidence, evidence, suggestionId } = req.body;
+    const cosLevel = scoring.levelFor(finding.score.cos, scoringCfg.COS_LEVELS);
+    const extras = scoring.calcOpportunityExtras({ dataOpportunity, technologyOpportunity, cosLevel, pmOpportunity: finding.score.pmOpportunity });
+
+    const opportunity = await svc.createBpFdeOpportunity(req.params.sessionId, finding.id, {
+      category: finding.category, title: finding.title, description: finding.description,
+      problem, processRef: process, impact, rootCause, risk,
+      pmOpportunity: finding.score.pmOpportunity,
+      automationPotential: finding.score.automationPotential,
+      aiOpportunity: finding.score.aiOpportunity,
+      castVoiceIndex: finding.score.castVoiceIndex,
+      dataOpportunity: extras.dataOpportunity.score,
+      technologyOpportunity: extras.technologyOpportunity.score,
+      priority: extras.priority,
+      evidence: evidence || finding.evidenceAnswerIds,
+      confidence,
+    }, req.user.userId, req.user.role);
+
+    if (suggestionId) await svc.resolveBpFdeAiSuggestion(suggestionId, 'ACCEPTED', req.user.userId, req.user.role).catch(() => {});
+    res.status(201).json({
+      opportunity,
+      levels: { dataOpportunity: extras.dataOpportunity.level, technologyOpportunity: extras.technologyOpportunity.level },
+    });
+  } catch (e) { next(e); }
+});
+
+// GET /api/blueprints-fde/:sessionId/opportunities — el Opportunity Register de la sesión
+router.get('/:sessionId/opportunities', auth, async (req, res, next) => {
+  try {
+    const opportunities = await svc.getBpFdeOpportunities(req.params.sessionId);
+    res.json({ opportunities });
   } catch (e) { next(e); }
 });
 

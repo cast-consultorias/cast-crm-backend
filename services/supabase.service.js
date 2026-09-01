@@ -810,6 +810,54 @@ async function upsertBpFdeScore(sessionId, findingId, computed, rawVariables, us
   return score;
 }
 
+// ─── BLUEPRINTS FDE+PMP — Opportunity Engine / Opportunity Register (Fase 9) ─
+// §33 de la fuente: "Crear automáticamente registros" — automático significa que
+// la IA redacta el borrador (ver draftOpportunityRegisterEntry en ai.service.js),
+// nunca que se persista sin que el FDE confirme (§10.1, mismo principio que
+// Fases 7-8). potential_solution queda NULL a propósito — CAST Solution Mapping
+// pendiente del catálogo real de servicios CAST.
+
+function dbToBpFdeOpportunity(row) {
+  if (!row) return null;
+  return {
+    id: row.id, sessionId: row.session_id, findingId: row.finding_id,
+    category: row.category, title: row.title, description: row.description,
+    problem: row.problem, processRef: row.process_ref, impact: row.impact, rootCause: row.root_cause, risk: row.risk,
+    pmOpportunity: row.pm_opportunity, automationPotential: row.automation_potential, aiOpportunity: row.ai_opportunity,
+    castVoiceIndex: row.cast_voice_index, dataOpportunity: row.data_opportunity, technologyOpportunity: row.technology_opportunity,
+    complexityScore: row.complexity_score, priority: row.priority, potentialSolution: row.potential_solution,
+    evidence: row.evidence, confidence: row.confidence, status: row.status,
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+async function createBpFdeOpportunity(sessionId, findingId, data, userId, userRole) {
+  const { data: row, error } = await supabase
+    .from('blueprint_opportunities')
+    .insert({
+      session_id: sessionId, finding_id: findingId,
+      category: data.category, title: data.title, description: data.description || null,
+      problem: data.problem || null, process_ref: data.processRef || null, impact: data.impact || null,
+      root_cause: data.rootCause || null, risk: data.risk || null,
+      pm_opportunity: data.pmOpportunity, automation_potential: data.automationPotential,
+      ai_opportunity: data.aiOpportunity, cast_voice_index: data.castVoiceIndex,
+      data_opportunity: data.dataOpportunity, technology_opportunity: data.technologyOpportunity,
+      priority: data.priority, potential_solution: null, // diferido — CAST Solution Mapping pendiente
+      evidence: data.evidence || null, confidence: data.confidence,
+    })
+    .select().single();
+  if (error) throw error;
+  const opportunity = dbToBpFdeOpportunity(row);
+  await addBpFdeAuditLog(sessionId, userId, userRole, 'opportunity_registered', null, { findingId, priority: opportunity.priority, category: opportunity.category });
+  return opportunity;
+}
+
+async function getBpFdeOpportunities(sessionId) {
+  const { data, error } = await supabase.from('blueprint_opportunities').select('*').eq('session_id', sessionId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(dbToBpFdeOpportunity);
+}
+
 // ─── ATTACHMENTS ──────────────────────────────────────────────────
 
 async function addAttachment(leadId, data, userId) {
@@ -1027,6 +1075,7 @@ module.exports = {
   getBpFdeVoiceConsent, setBpFdeVoiceConsent, addBpFdeTranscript, getBpFdeTranscripts,
   addBpFdeAiSuggestion, resolveBpFdeAiSuggestion,
   createBpFdeFinding, getBpFdeFindings, getBpFdeFindingById, upsertBpFdeScore,
+  createBpFdeOpportunity, getBpFdeOpportunities,
   addAttachment, getAttachmentsByLeadId, deleteAttachment,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,

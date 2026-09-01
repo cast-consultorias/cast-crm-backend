@@ -151,4 +151,70 @@ Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown
   }
 }
 
-module.exports = { generateLeadReport, structureBlueprintAnswer, estimateBlueprintFindingScores };
+// Fase 9 — Opportunity Engine: Claude redacta el borrador del registro de
+// Opportunity Register (Problem/Process/Impact/Root Cause/Risk + variables de
+// Data/Technology Opportunity) a partir de un hallazgo ya calificado (Fase 8).
+// Nunca escribe blueprint_opportunities directo — el FDE confirma (mismo
+// principio que Fases 7-8). Potential Solution (CAST Solution Mapping) queda
+// fuera a propósito: requiere el catálogo real de servicios CAST, todavía no
+// entregado — no se inventa.
+const {
+  DATA_OPPORTUNITY_VARIABLES, DATA_OPPORTUNITY_LABELS,
+  TECHNOLOGY_OPPORTUNITY_VARIABLES, TECHNOLOGY_OPPORTUNITY_LABELS,
+} = require('../config/blueprintScoring.config');
+
+async function draftOpportunityRegisterEntry(finding, score, evidenceText) {
+  const dataVars = DATA_OPPORTUNITY_VARIABLES.map(k => `  - ${k}: ${DATA_OPPORTUNITY_LABELS[k]}`).join('\n');
+  const techVars = TECHNOLOGY_OPPORTUNITY_VARIABLES.map(k => `  - ${k}: ${TECHNOLOGY_OPPORTUNITY_LABELS[k]}`).join('\n');
+
+  const prompt = `Eres el motor de Opportunity Engine de CAST Consultorías para Blueprints FDE+PMP. Este hallazgo ya fue calificado por el Scoring Engine (Fase 8):
+
+CATEGORÍA: ${finding.category}
+TÍTULO: ${finding.title}
+DESCRIPCIÓN: ${finding.description || '(sin descripción adicional)'}
+SCORES YA CALCULADOS (no los recalcules, son datos de entrada): COS=${score.cos} (${score.cosLevel}), Automation Potential=${score.automationPotential}, AI Opportunity=${score.aiOpportunity}, CAST Voice Index=${score.castVoiceIndex}, PM Opportunity=${score.pmOpportunity ? 'SÍ' : 'NO'}
+${evidenceText ? `\nEVIDENCIA (respuestas del cliente relacionadas):\n${evidenceText}` : ''}
+
+Tu tarea: redactar el borrador del registro de Opportunity Register, SOLO con información derivable de lo anterior — sin inventar hechos. Si algo no se puede derivar con confianza, usa una frase honesta como "No se pudo determinar con la evidencia disponible" en vez de inventarlo.
+
+Campos de texto a redactar (1-2 frases cada uno, español, directos):
+- problem: el problema de origen.
+- process: el proceso de negocio asociado.
+- impact: el impacto descrito o inferido.
+- rootCause: la causa raíz (no el síntoma — el porqué de fondo).
+- risk: el riesgo asociado a esta oportunidad si no se atiende.
+
+Variables de Data Opportunity, escala 0-5 (0=nula, 5=crítica):
+${dataVars}
+
+Variables de Technology Opportunity, escala 0-5 (0=nula, 5=crítica):
+${techVars}
+
+Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni markdown, con este formato exacto:
+{"problem": "...", "process": "...", "impact": "...", "rootCause": "...", "risk": "...", "dataOpportunity": {...6 llaves 0-5...}, "technologyOpportunity": {...5 llaves 0-5...}, "confidence": 0.0, "notes": "..."}
+
+- confidence: número entre 0.0 y 1.0 — qué tan seguro estás de este borrador completo.
+- notes: máximo una frase, solo si hay algo que el FDE debería verificar. Cadena vacía ("") si no hay nada que señalar.`;
+
+  const message = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1200,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = message.content[0].text.trim();
+  try {
+    return JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
+  } catch {
+    const zeros = keys => Object.fromEntries(keys.map(k => [k, 0]));
+    return {
+      problem: '', process: '', impact: '', rootCause: '', risk: '',
+      dataOpportunity: zeros(DATA_OPPORTUNITY_VARIABLES),
+      technologyOpportunity: zeros(TECHNOLOGY_OPPORTUNITY_VARIABLES),
+      confidence: 0.3,
+      notes: 'No se pudo generar el borrador automáticamente — completa manualmente.',
+    };
+  }
+}
+
+module.exports = { generateLeadReport, structureBlueprintAnswer, estimateBlueprintFindingScores, draftOpportunityRegisterEntry };
