@@ -623,9 +623,9 @@ async function getBpFdeAnswers(sessionId) {
   return (data || []).map(dbToBpFdeAnswer);
 }
 
-// Fase 4: el FDE escribe la respuesta directamente (✎ Escribir) — sin pipeline de
-// voz/IA todavía (Fases 6-7), así que la respuesta queda PM_CONFIRMED de una vez.
-async function upsertBpFdeAnswer(sessionId, questionCode, questionSetVersion, answerText, userId, userRole) {
+// Fase 4/6: el FDE escribe o dicta la respuesta directamente (✎ Escribir / 🎙 Hablar)
+// — sin estructuración por IA todavía (Fase 7), así que queda PM_CONFIRMED de una vez.
+async function upsertBpFdeAnswer(sessionId, questionCode, questionSetVersion, answerText, userId, userRole, capturedVia = 'text') {
   const { data, error } = await supabase
     .from('blueprint_answers')
     .upsert({
@@ -634,7 +634,7 @@ async function upsertBpFdeAnswer(sessionId, questionCode, questionSetVersion, an
       question_set_version: questionSetVersion,
       answer_text: answerText,
       status: 'PM_CONFIRMED',
-      captured_via: 'text',
+      captured_via: capturedVia,
       confirmed_by: userId,
       confirmed_at: nowISO(),
       updated_at: nowISO(),
@@ -643,8 +643,56 @@ async function upsertBpFdeAnswer(sessionId, questionCode, questionSetVersion, an
     .single();
   if (error) throw error;
   const answer = dbToBpFdeAnswer(data);
-  await addBpFdeAuditLog(sessionId, userId, userRole, 'answer_saved', null, { questionCode, answerText });
+  await addBpFdeAuditLog(sessionId, userId, userRole, 'answer_saved', null, { questionCode, answerText, capturedVia });
   return answer;
+}
+
+// ─── BLUEPRINTS FDE+PMP — Voz (Fase 6) ───────────────────────────────────────
+// Consentimiento obligatorio antes de la primera grabación (§09). Se inserta un
+// registro nuevo cada vez que se pide/decide — se lee el más reciente por sesión.
+
+function dbToBpFdeVoiceConsent(row) {
+  if (!row) return null;
+  return { id: row.id, sessionId: row.session_id, authorized: row.authorized, capturedBy: row.captured_by, capturedAt: row.captured_at, notes: row.notes };
+}
+
+async function getBpFdeVoiceConsent(sessionId) {
+  const { data, error } = await supabase
+    .from('blueprint_voice_consents')
+    .select('*').eq('session_id', sessionId)
+    .order('captured_at', { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return dbToBpFdeVoiceConsent(data);
+}
+
+async function setBpFdeVoiceConsent(sessionId, authorized, userId, userRole) {
+  const { data, error } = await supabase
+    .from('blueprint_voice_consents')
+    .insert({ session_id: sessionId, authorized, captured_by: userId })
+    .select().single();
+  if (error) throw error;
+  const consent = dbToBpFdeVoiceConsent(data);
+  await addBpFdeAuditLog(sessionId, userId, userRole, 'voice_consent', null, { authorized });
+  return consent;
+}
+
+function dbToBpFdeTranscript(row) {
+  return { id: row.id, sessionId: row.session_id, speaker: row.speaker, textContent: row.text_content, audioUrl: row.audio_url, createdAt: row.created_at };
+}
+
+async function addBpFdeTranscript(sessionId, speaker, textContent) {
+  const { data, error } = await supabase
+    .from('blueprint_transcripts')
+    .insert({ session_id: sessionId, speaker: speaker || 'UNKNOWN', text_content: textContent })
+    .select().single();
+  if (error) throw error;
+  return dbToBpFdeTranscript(data);
+}
+
+async function getBpFdeTranscripts(sessionId) {
+  const { data, error } = await supabase.from('blueprint_transcripts').select('*').eq('session_id', sessionId).order('created_at');
+  if (error) throw error;
+  return (data || []).map(dbToBpFdeTranscript);
 }
 
 // ─── ATTACHMENTS ──────────────────────────────────────────────────
@@ -861,6 +909,7 @@ module.exports = {
   createBpFdeSession, getBpFdeSessionById, getBpFdeSessionsByLead,
   updateBpFdeSession, transitionBpFdeSessionStatus, addBpFdeAuditLog,
   getBpFdeQuestionBank, getBpFdeAnswers, upsertBpFdeAnswer,
+  getBpFdeVoiceConsent, setBpFdeVoiceConsent, addBpFdeTranscript, getBpFdeTranscripts,
   addAttachment, getAttachmentsByLeadId, deleteAttachment,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,
