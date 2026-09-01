@@ -3,6 +3,7 @@
 const router  = require('express').Router();
 const auth    = require('../middleware/auth');
 const svc     = require('../services/supabase.service');
+const { structureBlueprintAnswer } = require('../services/ai.service');
 
 // POST /api/blueprints-fde/:leadId — crear sesión
 router.post('/:leadId', auth, async (req, res, next) => {
@@ -115,6 +116,36 @@ router.post('/:sessionId/transcripts', auth, async (req, res, next) => {
     if (!consent?.authorized) return res.status(403).json({ error: 'No hay consentimiento de grabación registrado para esta sesión' });
     const transcript = await svc.addBpFdeTranscript(req.params.sessionId, req.body.speaker, req.body.textContent);
     res.status(201).json({ transcript });
+  } catch (e) { next(e); }
+});
+
+// POST /api/blueprints-fde/:sessionId/ai/structure — estructura una respuesta cruda con Claude.
+// NUNCA escribe en blueprint_answers directamente — solo deja la propuesta en
+// blueprint_ai_suggestions (§10.1: "AI puede sugerir. El FDE confirma.").
+router.post('/:sessionId/ai/structure', auth, async (req, res, next) => {
+  try {
+    const { questionCode, rawText, questionSetVersion } = req.body;
+    if (!questionCode || !rawText?.trim()) return res.status(400).json({ error: 'questionCode y rawText son requeridos' });
+
+    const bank = await svc.getBpFdeQuestionBank(questionSetVersion || 1);
+    const question = bank.questions.find(q => q.code === questionCode);
+    if (!question) return res.status(404).json({ error: 'Pregunta no encontrada en el banco' });
+
+    const result = await structureBlueprintAnswer(question.prompt, rawText);
+    const suggestion = await svc.addBpFdeAiSuggestion(req.params.sessionId, 'structuring', {
+      questionCode, rawText, ...result,
+    });
+    res.status(201).json({ suggestion });
+  } catch (e) { next(e); }
+});
+
+// POST /api/blueprints-fde/:sessionId/ai/suggestions/:suggestionId/resolve — el FDE acepta/edita o rechaza
+router.post('/:sessionId/ai/suggestions/:suggestionId/resolve', auth, async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    if (!['ACCEPTED', 'REJECTED'].includes(status)) return res.status(400).json({ error: "status debe ser ACCEPTED o REJECTED" });
+    const suggestion = await svc.resolveBpFdeAiSuggestion(req.params.suggestionId, status, req.user.userId, req.user.role);
+    res.json({ suggestion });
   } catch (e) { next(e); }
 });
 

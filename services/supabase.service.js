@@ -695,6 +695,39 @@ async function getBpFdeTranscripts(sessionId) {
   return (data || []).map(dbToBpFdeTranscript);
 }
 
+// ─── BLUEPRINTS FDE+PMP — AI Structuring (Fase 7) ────────────────────────────
+// Regla no negociable (§10.1/§08): "AI puede sugerir. El FDE confirma." Por eso
+// una sugerencia NUNCA escribe directo en blueprint_answers — vive en
+// blueprint_ai_suggestions (PENDING/ACCEPTED/REJECTED) hasta que el FDE la
+// confirma o edita, momento en el que el guardado normal (upsertBpFdeAnswer,
+// siempre PM_CONFIRMED) es el único camino que toca la respuesta real. Así es
+// imposible que una IA sobrescriba silenciosamente algo ya confirmado.
+
+function dbToBpFdeSuggestion(row) {
+  return { id: row.id, sessionId: row.session_id, suggestionType: row.suggestion_type, payload: row.payload, status: row.status, reviewedBy: row.reviewed_by, reviewedAt: row.reviewed_at, createdAt: row.created_at };
+}
+
+async function addBpFdeAiSuggestion(sessionId, suggestionType, payload) {
+  const { data, error } = await supabase
+    .from('blueprint_ai_suggestions')
+    .insert({ session_id: sessionId, suggestion_type: suggestionType, payload })
+    .select().single();
+  if (error) throw error;
+  return dbToBpFdeSuggestion(data);
+}
+
+async function resolveBpFdeAiSuggestion(suggestionId, status, userId, userRole) {
+  const { data, error } = await supabase
+    .from('blueprint_ai_suggestions')
+    .update({ status, reviewed_by: userId, reviewed_at: nowISO() })
+    .eq('id', suggestionId)
+    .select().single();
+  if (error) throw error;
+  const suggestion = dbToBpFdeSuggestion(data);
+  await addBpFdeAuditLog(suggestion.sessionId, userId, userRole, 'ai_suggestion_' + status.toLowerCase(), null, { suggestionId });
+  return suggestion;
+}
+
 // ─── ATTACHMENTS ──────────────────────────────────────────────────
 
 async function addAttachment(leadId, data, userId) {
@@ -910,6 +943,7 @@ module.exports = {
   updateBpFdeSession, transitionBpFdeSessionStatus, addBpFdeAuditLog,
   getBpFdeQuestionBank, getBpFdeAnswers, upsertBpFdeAnswer,
   getBpFdeVoiceConsent, setBpFdeVoiceConsent, addBpFdeTranscript, getBpFdeTranscripts,
+  addBpFdeAiSuggestion, resolveBpFdeAiSuggestion,
   addAttachment, getAttachmentsByLeadId, deleteAttachment,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,
