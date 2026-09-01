@@ -440,6 +440,133 @@ async function approveBlueprint(leadId, ceoUserId, ceoUserName) {
   await addActivityLog(leadId, ceoUserId, ceoUserName, 'CEO', 'Output Blueprint aprobado', `Aprobado por ${ceoUserName} — Lead avanza a Etapa 07`, '07');
 }
 
+// ─── BLUEPRINT SESSIONS FDE+PMP (nuevo — dominio distinto de blueprint_sessions/IVC arriba) ───
+// Ver docs/cast-strategy/CAST_BLUEPRINTS_FDE_PMP_v1.0_ANTIGRAVITY_IMPLEMENTATION.md
+// Fase 2 — CRUD de sesión + máquina de estados (§12). Nota: la Sección 34 del Master
+// Spec (.docx) no está disponible en este repo — las transiciones abajo son la lectura
+// más conservadora de la secuencia de §12, no una copia de esa sección.
+
+const BPFDE_TRANSITIONS = {
+  DRAFT:           ['READY', 'ARCHIVED'],
+  READY:           ['IN_PROGRESS', 'ARCHIVED'],
+  IN_PROGRESS:     ['PAUSED', 'PENDING_REVIEW', 'ARCHIVED'],
+  PAUSED:          ['IN_PROGRESS', 'ARCHIVED'],
+  PENDING_REVIEW:  ['IN_PROGRESS', 'COMPLETED', 'ARCHIVED'],
+  COMPLETED:       ['ANALYSIS', 'ARCHIVED'],
+  ANALYSIS:        ['BLUEPRINT_READY', 'ARCHIVED'],
+  BLUEPRINT_READY: ['HANDED_OFF', 'ARCHIVED'],
+  HANDED_OFF:      ['ARCHIVED'],
+  ARCHIVED:        [],
+};
+
+function dbToBpFdeSession(row) {
+  if (!row) return null;
+  return {
+    id:                 row.id,
+    leadId:             row.lead_id,
+    status:             row.status,
+    mode:               row.mode,
+    questionSetVersion: row.question_set_version,
+    conductedBy:        row.conducted_by,
+    fdeSupervisorId:    row.fde_supervisor_id,
+    startedAt:          row.started_at,
+    completedAt:        row.completed_at,
+    handedOffAt:        row.handed_off_at,
+    createdAt:          row.created_at,
+    updatedAt:          row.updated_at,
+  };
+}
+
+async function addBpFdeAuditLog(sessionId, actorId, actorRole, action, before, after) {
+  const { error } = await supabase.from('blueprint_audit_log').insert({
+    session_id: sessionId,
+    actor_id:   actorId || null,
+    actor_role: actorRole || null,
+    action,
+    before:     before ?? null,
+    after:      after ?? null,
+  });
+  if (error) throw error;
+}
+
+async function createBpFdeSession(leadId, userId, userRole, { mode } = {}) {
+  const { data, error } = await supabase
+    .from('blueprint_sessions_fde')
+    .insert({ lead_id: leadId, conducted_by: userId, mode: mode || 'A' })
+    .select()
+    .single();
+  if (error) throw error;
+  const session = dbToBpFdeSession(data);
+  await addBpFdeAuditLog(session.id, userId, userRole, 'session_created', null, { status: session.status, mode: session.mode });
+  return session;
+}
+
+async function getBpFdeSessionById(id) {
+  const { data, error } = await supabase.from('blueprint_sessions_fde').select('*').eq('id', id).single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return dbToBpFdeSession(data);
+}
+
+async function getBpFdeSessionsByLead(leadId) {
+  const { data, error } = await supabase
+    .from('blueprint_sessions_fde')
+    .select('*')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(dbToBpFdeSession);
+}
+
+async function updateBpFdeSession(id, updates, userId, userRole) {
+  const before = await getBpFdeSessionById(id);
+  if (!before) throw new Error('Sesión Blueprint FDE+PMP no encontrada');
+
+  const dbUpdates = {};
+  if (updates.mode !== undefined)            dbUpdates.mode = updates.mode;
+  if (updates.fdeSupervisorId !== undefined) dbUpdates.fde_supervisor_id = updates.fdeSupervisorId;
+  if (Object.keys(dbUpdates).length === 0) return before;
+  dbUpdates.updated_at = nowISO();
+
+  const { data, error } = await supabase
+    .from('blueprint_sessions_fde')
+    .update(dbUpdates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  const after = dbToBpFdeSession(data);
+  await addBpFdeAuditLog(id, userId, userRole, 'session_updated', before, after);
+  return after;
+}
+
+async function transitionBpFdeSessionStatus(id, newStatus, userId, userRole) {
+  const before = await getBpFdeSessionById(id);
+  if (!before) throw new Error('Sesión Blueprint FDE+PMP no encontrada');
+
+  const allowed = BPFDE_TRANSITIONS[before.status] || [];
+  if (!allowed.includes(newStatus)) {
+    const err = new Error(`Transición inválida: ${before.status} → ${newStatus}. Permitidas: ${allowed.join(', ') || 'ninguna (estado terminal)'}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const dbUpdates = { status: newStatus, updated_at: nowISO() };
+  if (newStatus === 'IN_PROGRESS' && !before.startedAt) dbUpdates.started_at = nowISO();
+  if (newStatus === 'COMPLETED')  dbUpdates.completed_at = nowISO();
+  if (newStatus === 'HANDED_OFF') dbUpdates.handed_off_at = nowISO();
+
+  const { data, error } = await supabase
+    .from('blueprint_sessions_fde')
+    .update(dbUpdates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  const after = dbToBpFdeSession(data);
+  await addBpFdeAuditLog(id, userId, userRole, 'status_change', { status: before.status }, { status: after.status });
+  return after;
+}
+
 // ─── ATTACHMENTS ──────────────────────────────────────────────────
 
 async function addAttachment(leadId, data, userId) {
@@ -651,6 +778,8 @@ module.exports = {
   generateLeadCode,
   addActivityLog, getActivityByLeadId,
   getBlueprintByLeadId, createBlueprint, updateBlueprint, approveBlueprint,
+  createBpFdeSession, getBpFdeSessionById, getBpFdeSessionsByLead,
+  updateBpFdeSession, transitionBpFdeSessionStatus, addBpFdeAuditLog,
   addAttachment, getAttachmentsByLeadId, deleteAttachment,
   getUserByEmail, updateLastLogin, getAllUsers,
   getDashboardStats, addToClosedLost,

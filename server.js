@@ -44,6 +44,7 @@ app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 10, messag
 app.use('/api/auth',      require('./routes/auth.routes'));
 app.use('/api/leads',     require('./routes/leads.routes'));
 app.use('/api/blueprint', require('./routes/blueprint.routes'));
+app.use('/api/blueprints-fde', require('./routes/blueprintFde.routes'));
 app.use('/api/emails',    require('./routes/emails.routes'));
 app.use('/api/calendar',  require('./routes/calendar.routes'));
 app.use('/api/drive',     require('./routes/drive.routes'));
